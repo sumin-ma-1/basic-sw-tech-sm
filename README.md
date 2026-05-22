@@ -58,7 +58,17 @@ sequenceDiagram
 
 ## 실행 결과 캡쳐
 
+### 요청 의도별 코드 생성
+
+사용자의 승인을 받아 실행 후에 생성된 파일을 받을 수 있습니다.
+
 <img width="1997" height="1891" alt="Image" src="https://github.com/user-attachments/assets/9cf8313c-3b0f-4050-b84f-be0ed319ce8d" />
+
+### 시스템 프롬프팅 페르소나화
+
+프리셋 페르소나 외 사용자가 생성 및 관리할 수 있습니다.
+
+<img width="1997" height="1687" alt="Image" src="https://github.com/user-attachments/assets/b6470f32-29fd-4125-b9f7-46f85bb812bc" />
 
 ## 앱 시작 흐름
 
