@@ -1,6 +1,8 @@
-# Basic Software Technology — LLM 대화 앱
+# Basic Software Technology
 
-Streamlit 기반 AI 대화 도구입니다. **Ollama** 기반 로컬 LLM과 통신하며, 채팅에서 파일을 첨부·분석하고 필요 시 Python 코드를 생성·승인 실행합니다.
+Streamlit 기반 AI 대화 도구입니다.
+
+**Ollama** 기반 로컬 LLM과 통신하며, 채팅에서 파일을 첨부·분석하고 필요 시 Python 코드를 생성·승인 실행합니다.
 
 - 기본 포트: **8507**
 - 진입점: `app.py`
@@ -14,54 +16,49 @@ Streamlit 기반 AI 대화 도구입니다. **Ollama** 기반 로컬 LLM과 통�
 | 데이터 처리 | pandas, openpyxl |
 | 코드 실행 | Python `subprocess` (대화별 작업 폴더) |
 
-## 전체 실행 구조
+## 파일 첨부 · 코드 실행 구조
+
+파일이 있거나 활성 데이터셋(`df`)이 있으면, 모델이 ` ```python ` 블록을 내면 **자동 실행하지 않고** 승인 UI를 띄웁니다.
 
 ```mermaid
-flowchart TB
-    subgraph UI["Streamlit UI"]
-        Main["메인: AI 채팅"]
-        Side["사이드바: Ollama / Persona / 히스토리 / 프로필"]
-    end
+sequenceDiagram
+    participant U as 사용자
+    participant S as Streamlit
+    participant O as Ollama
+    participant W as Workspace
 
-    subgraph Input["사용자 입력"]
-        ChatIn["st.chat_input (텍스트 + 파일)"]
-    end
+    U->>S: 메시지 + 파일
+    S->>W: 첨부 파일 저장
+    S->>O: messages (파일 요약 + 경로 + CODE_AGENT_INSTRUCTION)
+    O-->>S: 답변 (+ python 블록)
+    S->>U: 실행 코드 표시 / 승인·취소
 
-    subgraph Prep["전처리"]
-        Parse["process_uploaded_file"]
-        WS["prepare_files_in_workspace"]
-        Ctx["build_files_for_model + build_active_context"]
+    alt 실행 승인
+        U->>S: ✅ 실행 승인
+        S->>W: _run_script.py 작성 후 subprocess 실행
+        W-->>S: stdout/stderr, 신규 파일 목록
+        S->>U: 결과 + 생성 파일 다운로드
+    else 실행 취소
+        U->>S: ❌ 실행 취소
     end
-
-    subgraph LLM["Ollama"]
-        Build["build_api_messages"]
-        API["POST /api/chat"]
-    end
-
-    subgraph Post["응답 후처리"]
-        Extract["extract_python_blocks"]
-        Approve["실행 승인 UI"]
-        Exec["execute_python_code"]
-        DL["생성 파일 다운로드"]
-    end
-
-    subgraph Store["영속 저장"]
-        Index["chat_history/index.json"]
-        Profile["user_profile.json"]
-        Settings["app_settings.json"]
-        Workspace["workspaces/{chat_id}/"]
-    end
-
-    Side --> Main
-    ChatIn --> Parse --> WS --> Ctx
-    Ctx --> Build --> API
-    API --> Extract
-    Extract --> Approve --> Exec --> DL
-    Main --> Index
-    WS --> Workspace
-    Side --> Profile
-    Side --> Settings
 ```
+
+| 단계 | 함수 | 설명 |
+|------|------|------|
+| 작업 폴더 | `get_chat_workspace()` | `chat_history/workspaces/{active_chat_id}/` |
+| 실행 | `execute_python_code()` | `sys.executable`로 스크립트 실행, cwd=workspace, 타임아웃 120초 |
+| 신규 파일 | `list_workspace_files()` diff | 실행 전후 파일 비교 → 다운로드 버튼 |
+| 상태 저장 | `patch_message()` | `execution_status`, `execution_result` 메시지에 기록 |
+
+**실행 상태 (`execution_status`):**
+
+- `pending` — 승인 대기
+- `completed` — 실행 완료 (결과·다운로드 표시)
+- `cancelled` — 사용자 취소
+
+## 실행 결과 캡쳐
+
+<img width="1997" height="1891" alt="Image" src="https://github.com/user-attachments/assets/9cf8313c-3b0f-4050-b84f-be0ed319ce8d" />
 
 ## 앱 시작 흐름
 
@@ -140,46 +137,6 @@ chat_input (텍스트 + 파일)
     │
     └─► append_message (assistant) + st.rerun()
 ```
-
-## 파일 첨부 · 코드 실행 구조
-
-파일이 있거나 활성 데이터셋(`df`)이 있으면, 모델이 ` ```python ` 블록을 내면 **자동 실행하지 않고** 승인 UI를 띄웁니다.
-
-```mermaid
-sequenceDiagram
-    participant U as 사용자
-    participant S as Streamlit
-    participant O as Ollama
-    participant W as Workspace
-
-    U->>S: 메시지 + 파일
-    S->>W: 첨부 파일 저장
-    S->>O: messages (파일 요약 + 경로 + CODE_AGENT_INSTRUCTION)
-    O-->>S: 답변 (+ python 블록)
-    S->>U: 실행 코드 표시 / 승인·취소
-
-    alt 실행 승인
-        U->>S: ✅ 실행 승인
-        S->>W: _run_script.py 작성 후 subprocess 실행
-        W-->>S: stdout/stderr, 신규 파일 목록
-        S->>U: 결과 + 생성 파일 다운로드
-    else 실행 취소
-        U->>S: ❌ 실행 취소
-    end
-```
-
-| 단계 | 함수 | 설명 |
-|------|------|------|
-| 작업 폴더 | `get_chat_workspace()` | `chat_history/workspaces/{active_chat_id}/` |
-| 실행 | `execute_python_code()` | `sys.executable`로 스크립트 실행, cwd=workspace, 타임아웃 120초 |
-| 신규 파일 | `list_workspace_files()` diff | 실행 전후 파일 비교 → 다운로드 버튼 |
-| 상태 저장 | `patch_message()` | `execution_status`, `execution_result` 메시지에 기록 |
-
-**실행 상태 (`execution_status`):**
-
-- `pending` — 승인 대기
-- `completed` — 실행 완료 (결과·다운로드 표시)
-- `cancelled` — 사용자 취소
 
 ## 지원 파일 형식
 
