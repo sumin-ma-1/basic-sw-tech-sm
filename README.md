@@ -1,106 +1,177 @@
 # Basic Software Technology
 
-Streamlit 기반 AI 대화 도구입니다.
+**Ollama** 기반 로컬 LLM 들과 대화하고, 채팅을 통해 엑셀 작업이 가능하며, 필요 시 Python 코드를 **승인 후 실행**하는 Streamlit 앱입니다.
 
-**Ollama** 기반 로컬 LLM과 통신하며, 채팅에서 파일을 첨부·분석하고 필요 시 Python 코드를 생성·승인 실행합니다.
+| 항목 | 내용 |
+|------|------|
+| UI 프레임워크 | Streamlit (별도 랜딩 페이지 없음 — 실행 즉시 채팅 화면) |
+| LLM | Ollama `POST /api/chat` |
+| 진입점 | `app.py` |
+| 기본 URL | `http://localhost:8507` |
 
-- 기본 포트: **8507**
-- 진입점: `app.py`
+---
 
-## LLM 실행 구조
+## 시스템의 구성요소
 
-메시지를 한 번 보낼 때마다 **컨텍스트를 모아 Ollama에 1회 요청**합니다. 파일이 연결된 경우에만 모델이 제안한 **Python 코드를 사용자 승인 후** 로컬에서 실행합니다. 스트리밍은 사용하지 않습니다 (`stream: false`).
+이 저장소는 Streamlit 기반 **단일 앱 파일(`app.py`)** 중심입니다. React·별도 프론트·랜딩 HTML은 없습니다.
 
-일반 대화만 할 때는 **컨텍스트 조립 → Ollama 호출 → 답변 저장** 경로만 탑니다.
+### 저장소 구조
 
-### 구성 요소
-
-```mermaid
-flowchart TB
-    subgraph UI["Streamlit (app.py)"]
-        Chat["메인: render_ai_chat"]
-        Side["사이드바: Ollama · Persona · 프로필 · 히스토리"]
-        Build["build_api_messages"]
-        Chat --> Build
-        Side --> Build
-    end
-
-    subgraph LLM["Ollama (로컬)"]
-        API["POST /api/chat"]
-    end
-
-    subgraph Store["chat_history/"]
-        Index["index.json (대화)"]
-        WS["workspaces/chat_id/ (첨부·실행 결과)"]
-        Prof["user_profile.json · app_settings.json"]
-    end
-
-    Chat -->|"messages JSON"| API
-    API -->|"assistant 텍스트"| Chat
-    Chat --> WS
-    Chat --> Index
-    Side --> Prof
+```
+basic-sw-tech-sm/
+├── app.py                    # UI · Ollama · 파일 · 코드 실행 (전부 여기)
+├── requirements.txt          # Python 패키지
+├── sm_final.png              # 브라우저 탭 파비콘
+├── .streamlit/config.toml    # Streamlit 서버 설정 (포트 8507)
+├── chat_history/             # 실행 중 생성 (대화·프로필·workspace)
+└── README.md
 ```
 
-Ollama는 **추론(텍스트 생성)** 만 담당하고, 파일 저장·코드 실행·다운로드는 Streamlit과 workspace가 처리합니다.
+| 파일 / 폴더 | 역할 |
+|-------------|------|
+| `app.py` | `main()` → 사이드바 설정 + 메인 채팅 루프 |
+| `.streamlit/config.toml` | 포트 `8507`, headless 모드 |
+| `chat_history/index.json` | 대화 목록·메시지 영속 저장 |
+| `chat_history/user_profile.json` | 이름·언어·시간대 등 (선택 입력) |
+| `chat_history/app_settings.json` | Persona 선택·커스텀 Persona |
+| `chat_history/workspaces/{id}/` | 첨부 파일·코드 실행 결과 파일 |
 
-### 한 턴 처리 흐름
-
-```mermaid
-flowchart TD
-    A["사용자: chat_input<br/>텍스트 + 파일"] --> B["process_uploaded_file<br/>요약 · DataFrame"]
-    B --> C["prepare_files_in_workspace<br/>workspaces에 저장"]
-    C --> D["build_files_for_model<br/>활성 df 포함"]
-    D --> E["append_message (user)<br/>index.json 저장"]
-
-    E --> F["build_api_messages"]
-    F --> F1["system: Persona + 프로필 + 데이터셋<br/>+ 첨부 시 코드 작성 지시"]
-    F --> F2["user/assistant: 대화 히스토리"]
-    F1 --> G["call_ollama<br/>POST /api/chat"]
-    F2 --> G
-
-    G --> H["assistant 응답 표시"]
-    H --> I{"첨부/활성 데이터 있고<br/>python 블록 있음?"}
-    I -->|Yes| J["설명 + 실행 코드 UI<br/>execution_status: pending"]
-    I -->|No| K["일반 답변만 저장"]
-    J --> L{"사용자 승인?"}
-    L -->|승인| M["execute_python_code<br/>subprocess · workspace"]
-    M --> N["실행 결과 / 상세 기록<br/>생성 파일 다운로드"]
-    L -->|취소| O["cancelled"]
-```
-
-### 모델에 넣는 system 내용 (요약)
+### 앱 화면 구조 (Streamlit)
 
 ```mermaid
 flowchart LR
-    P[Persona] --> S[system 1개]
-    U[유저 프로필] --> S
-    D[활성 데이터셋 요약] --> S
-    F[첨부 파일 지시 + 경로] --> S
-    S --> M[messages 배열]
-    H[user/assistant 히스토리] --> M
-    M --> O[Ollama]
+    subgraph Browser["브라우저"]
+        Page["단일 페이지<br/>채팅 + 사이드바"]
+    end
+
+    subgraph App["app.py"]
+        Side["사이드바<br/>Ollama · Persona · 프로필 · 히스토리"]
+        Main["메인<br/>대화 목록 + chat_input"]
+        Side --- Main
+    end
+
+    Page --> App
 ```
 
-파일이 없으면 **첨부 파일 지시 + 경로** 블록은 포함되지 않습니다.
+| 영역 | 담당 기능 |
+|------|-----------|
+| **메인** | 메시지 표시, 파일 첨부 입력, 코드 승인·실행 결과 |
+| **사이드바** | Ollama URL·모델, 시스템 프롬프트(Persona), 유저 프로필, 대화 관리·보내기 |
 
-| 블록 | 출처 |
-|------|------|
-| Persona | Preset 3종 + Custom (`app_settings.json`) |
-| 사용자 정보 | `user_profile.json` (입력된 항목만) |
-| 활성 데이터셋 | `st.session_state.df` 요약 |
-| 첨부 파일 | 요약 + workspace 경로 + `CODE_AGENT_INSTRUCTION` |
+### 외부·런타임 구성
 
-> API 페이로드, 함수명, ASCII 파이프라인은 아래 **「LLM 요청이 만들어지는 방식」**, **「사용자 메시지 1회 처리 파이프라인」**, **「파일 첨부 · 코드 실행 구조」** 를 참고하세요.
+```mermaid
+flowchart TB
+    User([사용자]) --> ST[Streamlit app.py]
+    ST --> OL[Ollama 서버<br/>localhost:11434]
+    ST --> Disk[(chat_history/)]
+
+  OL -.->|텍스트 응답| ST
+  Disk -.->|대화·파일| ST
+```
+
+| 구성요소 | 하는 일 | 하지 않는 일 |
+|----------|---------|----------------|
+| **Streamlit** | UI, 세션, 파일 업로드, 코드 승인 UI, subprocess 실행 | LLM 추론 |
+| **Ollama** | `messages` 받아 답변 생성 | 파일 저장·코드 실행 |
+| **chat_history/** | 대화·설정·workspace 파일 보관 | — |
+
+### 실행 방법 (앱 기동)
+
+별도 `run.sh` / `run.bat`은 없습니다. 아래만 사용합니다.
+
+```powershell
+pip install -r requirements.txt
+ollama pull qwen3:8b          # 사용할 모델 (예시)
+streamlit run app.py          # .streamlit/config.toml → 포트 8507
+```
+
+> LLM이 생성한 코드는 승인 후 `workspaces/{대화ID}/_run_script.py`로 **임시 실행**됩니다. 이 파일은 앱을 띄우는 스크립트와 무관합니다.
+
+### 의존성 (`requirements.txt`)
+
+| 패키지 | 용도 |
+|--------|------|
+| `streamlit` | 웹 UI, `chat_input` 파일 첨부, 모달(`st.dialog`) |
+| `pandas` | CSV/Excel 읽기, 데이터 요약 |
+| `openpyxl` | Excel(`.xlsx`) 읽기 |
+
+---
+
+## LLM 실행 구조
+
+한 번 메시지를 보낼 때: **입력 처리 → `messages` 조립 → Ollama 1회 호출 → (조건 시) 코드 승인 실행**. 스트리밍 없음 (`stream: false`).
+
+### 한눈에 보기
+
+```mermaid
+flowchart LR
+    A[입력] --> B[컨텍스트]
+    B --> C[Ollama]
+    C --> D[응답]
+    D --> E{코드?}
+    E -->|Yes| F[승인 실행]
+    E -->|No| G[저장]
+    F --> G
+```
+
+### 상세 흐름
+
+```mermaid
+flowchart TD
+    IN["chat_input"] --> P1["파일 파싱·요약"]
+    P1 --> P2["workspace 저장"]
+    P2 --> P3["build_api_messages"]
+    P3 --> OL["call_ollama"]
+    OL --> OUT["assistant 표시"]
+    OUT --> Q{"첨부·df + python?"}
+    Q -->|No| SAVE["대화 저장"]
+    Q -->|Yes| UI["코드 UI · pending"]
+    UI --> AP{"승인?"}
+    AP -->|Yes| RUN["subprocess 실행"]
+    AP -->|No| CAN["cancelled"]
+    RUN --> SAVE
+    CAN --> SAVE
+```
+
+### `system` 메시지 조립
+
+```mermaid
+flowchart TB
+    subgraph SYS["system (1개로 합침)"]
+        direction TB
+        P[Persona]
+        U[유저 프로필]
+        D[활성 데이터셋]
+        F[첨부 시: 코드 지시 + 파일 경로]
+    end
+
+    H[user / assistant 히스토리] --> MSG[messages]
+    SYS --> MSG
+    MSG --> API[Ollama /api/chat]
+```
+
+| system 블록 | 설정 위치 |
+|-------------|-----------|
+| Persona | 사이드바 · Preset 3종 + Custom (`app_settings.json`) |
+| 프로필 | 모달 · `user_profile.json` |
+| 데이터셋 | `st.session_state.df` 요약 |
+| 첨부 지시 | 파일 있을 때만 · workspace 경로 포함 |
+
+일반 대화만 할 때는 **Persona + 프로필 + 데이터셋(또는 안내 문구) + 히스토리**만 전달됩니다.
+
+---
 
 ## 기술 스택
 
 | 구분 | 기술 |
 |------|------|
 | UI | Streamlit |
-| LLM | Ollama (`/api/chat`, OpenAI 호환 메시지 형식) |
-| 데이터 처리 | pandas, openpyxl |
-| 코드 실행 | Python `subprocess` (대화별 작업 폴더) |
+| LLM | Ollama (`/api/chat`) |
+| 데이터 | pandas, openpyxl |
+| 코드 실행 | Python `subprocess` + 대화별 workspace |
+
+---
 
 ## 파일 첨부 · 코드 실행 구조
 
@@ -142,6 +213,8 @@ sequenceDiagram
 - `completed` — 실행 완료 (결과·다운로드 표시)
 - `cancelled` — 사용자 취소
 
+---
+
 ## 실행 결과 캡쳐
 
 ### 요청 의도별 코드 생성
@@ -156,18 +229,35 @@ sequenceDiagram
 
 <img width="1997" height="1687" alt="Image" src="https://github.com/user-attachments/assets/b6470f32-29fd-4125-b9f7-46f85bb812bc" />
 
+---
+
 ## 앱 시작 흐름
 
-1. `main()` → `st.set_page_config`
-2. `init_session_state()` — 세션·디스크에서 채팅/프로필/Persona 설정 로드
-3. `render_sidebar()` — Ollama URL·모델, 시스템 프롬프트(Persona), 채팅 히스토리, 유저 프로필
-4. `render_ai_chat()` — 대화 렌더링 및 `st.chat_input` 대기
+`streamlit run app.py` 이후 `app.py` 안에서의 순서입니다.
 
-## LLM 요청이 만들어지는 방식
+```mermaid
+flowchart TD
+    S1["set_page_config · 파비콘"] --> S2["init_session_state"]
+    S2 --> S3["디스크에서 chat · profile · persona 로드"]
+    S3 --> S4["render_sidebar"]
+    S4 --> S5["render_ai_chat · chat_input 대기"]
+    S5 --> S6{"입력?"}
+    S6 -->|Yes| S7["Ollama 호출 · 저장 · rerun"]
+    S7 --> S5
+```
 
-한 번의 사용자 전송마다 `call_ollama()`가 호출됩니다. Ollama에는 **비스트리밍** `POST {OLLAMA_URL}/api/chat` 로 전달합니다.
+| 단계 | 함수 | 설명 |
+|------|------|------|
+| 1 | `main()` | 페이지 설정 |
+| 2 | `init_session_state()` | 세션 초기화, `chat_history/` 로드 |
+| 3 | `render_sidebar()` | Ollama, Persona, 프로필, 히스토리 |
+| 4 | `render_ai_chat()` | 채팅 렌더링·입력 처리 |
 
-### 요청 본문 구조
+---
+
+## LLM 요청 상세
+
+### API 요청 본문
 
 ```json
 {
@@ -181,103 +271,77 @@ sequenceDiagram
 }
 ```
 
-### `messages` 배열 구성 (`build_api_messages`)
+### `messages` 배열
 
 | 순서 | role | 내용 |
 |------|------|------|
-| 1 | `system` | 아래 블록을 `\n\n`로 이어 붙인 문자열 |
-| 2~ | `user` / `assistant` | 현재 대화의 전체 히스토리 |
+| 1 | `system` | Persona + 프로필 + 데이터셋 + (선택) 첨부 지시 |
+| 2~ | `user` / `assistant` | 현재 대화 전체 (`format_user_message`로 첨부 요약 포함) |
 
-**system 메시지에 포함되는 블록 (위에서부터):**
+### Ollama 설정
 
-1. **시스템 프롬프트 (Persona)**  
-   - Preset: 데이터 분석가 / 코딩 어시스턴트 / 학습 멘토  
-   - Custom: 사용자가 저장한 커스텀 Persona (`app_settings.json`)
-2. **사용자 프로필** (입력된 항목만)  
-   - 이름, 호칭, 사용 언어, 시간대/지역, 자기소개
-3. **활성 데이터셋** (`build_active_context`)  
-   - `st.session_state.df`가 있으면 `describe`, dtypes, 결측치 등 요약  
-   - 없으면 안내 문구
-4. **파일 첨부 시 추가** (`attached_files`가 있을 때)  
-   - `CODE_AGENT_INSTRUCTION` — Python 코드 블록 작성·작업 폴더 규칙  
-   - `build_workspace_file_context` — 첨부 파일명과 디스크 경로
+- URL: `http://localhost:11434` (환경변수 `OLLAMA_HOST`)
+- 모델 목록: `GET /api/tags` → 사이드바 선택
 
-**user 메시지 포맷 (`format_user_message`):**
+---
 
-- 일반 텍스트 + (있으면) `### 첨부: 파일명 (타입)\n{요약}` 반복
-
-### Ollama 연결 설정
-
-- 기본 URL: `http://localhost:11434` (환경변수 `OLLAMA_HOST`로 변경 가능)
-- 모델 목록: `GET /api/tags` → 사이드바 selectbox
-
-## 사용자 메시지 1회 처리 파이프라인
+## 메시지 1회 처리 (함수 단위)
 
 ```
-chat_input (텍스트 + 파일)
-    │
-    ├─► process_uploaded_file()     CSV/Excel/txt/md/json 파싱·요약
-    │
-    ├─► prepare_files_in_workspace()  chat_history/workspaces/{대화ID}/ 에 저장
-    │
-    ├─► apply_chat_files()          DataFrame → session_state.df (활성 데이터)
-    │
-    ├─► build_files_for_model()     이번 턴 첨부 또는 활성 df → 모델용 파일 메타
-    │
-    ├─► append_message (user)       대화 기록 + index.json 저장
-    │
-    ├─► call_ollama()               LLM 응답 생성
-    │
-    ├─► extract_python_blocks()     응답 내 ```python ... ``` 추출 (첨부 있을 때)
-    │       └─► executable_code + execution_status: "pending"
-    │
-    └─► append_message (assistant) + st.rerun()
+chat_input
+  → process_uploaded_file()
+  → prepare_files_in_workspace()
+  → apply_chat_files()          # session df
+  → build_files_for_model()
+  → append_message (user)
+  → call_ollama()                 # build_api_messages() 내부
+  → extract_python_blocks()       # 첨부·df 있을 때
+  → append_message (assistant)
+  → st.rerun()
 ```
+
+---
 
 ## 지원 파일 형식
 
-| 확장자 | 앱 내 처리 | LLM 전달 |
-|--------|------------|----------|
-| csv, xlsx, xls | DataFrame 요약 + workspace 저장 | 요약 + 경로 |
-| txt, md, json | 텍스트(최대 12,000자) + workspace 저장 | 요약 + 경로 |
-| 채팅 첨부 | `CHAT_FILE_TYPES` | 동일 |
+| 확장자 | 앱 처리 | LLM 전달 |
+|--------|---------|----------|
+| csv, xlsx, xls | DataFrame 요약 + workspace | 요약 + 경로 |
+| txt, md, json | 텍스트(최대 12,000자) | 요약 + 경로 |
 
-## 데이터 저장 위치
+채팅 첨부 허용: `csv`, `txt`, `md`, `json`, `xlsx`, `xls`
+
+---
+
+## 데이터 저장
 
 ```
 chat_history/
-├── index.json              # 모든 대화·메시지
-├── user_profile.json       # 유저 프로필
-├── app_settings.json       # 선택 Persona, 커스텀 Persona
+├── index.json
+├── user_profile.json
+├── app_settings.json
 └── workspaces/
-    └── {chat_id}/          # 첨부·실행 결과 파일
+    └── {chat_id}/
 ```
 
-대화보내기/가져오기: JSON 또는 Markdown (사이드바 드롭다운 선택).
+대화보내기/가져오기: 사이드바에서 JSON 또는 Markdown 선택.
 
-## 실행 방법
-
-```powershell
-pip install -r requirements.txt
-
-# Ollama 실행 및 모델 준비 (예)
-ollama pull qwen3:8b
-
-streamlit run app.py
-# → http://localhost:8507
-```
+---
 
 ## 주요 기본값
 
 | 항목 | 값 |
 |------|-----|
+| Streamlit 포트 | 8507 |
 | Temperature | 0.3 |
-| max_tokens (`num_predict`) | 2048 |
-| Ollama 요청 타임아웃 | 300초 |
+| max_tokens | 2048 |
+| Ollama 타임아웃 | 300초 |
 | 코드 실행 타임아웃 | 120초 |
 | 기본 Persona | 데이터 분석가 |
 
+---
+
 ## 보안 참고
 
-- LLM이 생성한 Python 코드는 **사용자 승인 후** 로컬 subprocess로 실행됩니다.
-- 실행 범위는 대화별 workspace 디렉터리로 제한되지만, 생성 코드를 신뢰할 수 있는 환경에서만 사용하세요.
+- LLM이 만든 코드는 **사용자 승인 후**에만 실행됩니다.
+- 실행 위치는 `workspaces/{대화ID}/`로 제한되지만, 신뢰할 수 있는 로컬 환경에서만 사용하세요.
