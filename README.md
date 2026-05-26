@@ -4,8 +4,13 @@
 
 | 항목 | 내용 |
 |------|------|
+<<<<<<< HEAD
 | UI 프레임워크 | Streamlit (`st.navigation` — **AI 채팅** · **Ollama 관리**) |
 | LLM | Ollama `POST /api/chat` |
+=======
+| UI 프레임워크 | Streamlit (별도 랜딩 페이지 없음, 실행 즉시 채팅 화면) |
+| LLM | Ollama 로 실행하는 로컬 LLM 모델 `POST /api/chat` |
+>>>>>>> 9ab68e06621555efd6bc2061ef8afdff70e557a9
 | 진입점 | `app.py` |
 | 기본 URL | `http://localhost:8507` |
 
@@ -21,8 +26,11 @@
 basic-sw-tech-sm/
 ├── app.py                    # UI · Ollama · 파일 · 코드 실행 (전부 여기)
 ├── requirements.txt          # Python 패키지
+<<<<<<< HEAD
 ├── sm_final.png              # 브라우저 탭 파비콘
 ├── docs/screenshots/         # README용 사용 화면 캡처 (PNG)
+=======
+>>>>>>> 9ab68e06621555efd6bc2061ef8afdff70e557a9
 ├── .streamlit/config.toml    # Streamlit 서버 설정 (포트 8507)
 ├── chat_history/             # 실행 중 생성 (대화·프로필·workspace)
 └── README.md
@@ -46,10 +54,18 @@ flowchart LR
     end
 
     subgraph App["app.py"]
+<<<<<<< HEAD
         Nav["사이드바 네비<br/>AI 채팅 · Ollama 관리"]
         Side["채팅 사이드바<br/>Ollama · Persona · 프로필 · 히스토리"]
         Main["메인<br/>대화 목록 + chat_input"]
         Nav --- Side
+=======
+        direction TB
+
+        Side["사이드바<br/><small>Ollama · Persona<br/>프로필 · 히스토리</small>"]
+        Main["메인<br/><small>대화 목록<br/>chat_input</small>"]
+
+>>>>>>> 9ab68e06621555efd6bc2061ef8afdff70e557a9
         Side --- Main
     end
 
