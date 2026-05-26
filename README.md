@@ -7,6 +7,92 @@ Streamlit 기반 AI 대화 도구입니다.
 - 기본 포트: **8507**
 - 진입점: `app.py`
 
+## LLM 실행 구조
+
+메시지를 한 번 보낼 때마다 **컨텍스트를 모아 Ollama에 1회 요청**합니다. 파일이 연결된 경우에만 모델이 제안한 **Python 코드를 사용자 승인 후** 로컬에서 실행합니다. 스트리밍은 사용하지 않습니다 (`stream: false`).
+
+일반 대화만 할 때는 **컨텍스트 조립 → Ollama 호출 → 답변 저장** 경로만 탑니다.
+
+### 구성 요소
+
+```mermaid
+flowchart TB
+    subgraph UI["Streamlit (app.py)"]
+        Chat["메인: render_ai_chat"]
+        Side["사이드바: Ollama · Persona · 프로필 · 히스토리"]
+        Build["build_api_messages"]
+        Chat --> Build
+        Side --> Build
+    end
+
+    subgraph LLM["Ollama (로컬)"]
+        API["POST /api/chat"]
+    end
+
+    subgraph Store["chat_history/"]
+        Index["index.json (대화)"]
+        WS["workspaces/chat_id/ (첨부·실행 결과)"]
+        Prof["user_profile.json · app_settings.json"]
+    end
+
+    Chat -->|"messages JSON"| API
+    API -->|"assistant 텍스트"| Chat
+    Chat --> WS
+    Chat --> Index
+    Side --> Prof
+```
+
+Ollama는 **추론(텍스트 생성)** 만 담당하고, 파일 저장·코드 실행·다운로드는 Streamlit과 workspace가 처리합니다.
+
+### 한 턴 처리 흐름
+
+```mermaid
+flowchart TD
+    A["사용자: chat_input<br/>텍스트 + 파일"] --> B["process_uploaded_file<br/>요약 · DataFrame"]
+    B --> C["prepare_files_in_workspace<br/>workspaces에 저장"]
+    C --> D["build_files_for_model<br/>활성 df 포함"]
+    D --> E["append_message (user)<br/>index.json 저장"]
+
+    E --> F["build_api_messages"]
+    F --> F1["system: Persona + 프로필 + 데이터셋<br/>+ 첨부 시 코드 작성 지시"]
+    F --> F2["user/assistant: 대화 히스토리"]
+    F1 --> G["call_ollama<br/>POST /api/chat"]
+    F2 --> G
+
+    G --> H["assistant 응답 표시"]
+    H --> I{"첨부/활성 데이터 있고<br/>python 블록 있음?"}
+    I -->|Yes| J["설명 + 실행 코드 UI<br/>execution_status: pending"]
+    I -->|No| K["일반 답변만 저장"]
+    J --> L{"사용자 승인?"}
+    L -->|승인| M["execute_python_code<br/>subprocess · workspace"]
+    M --> N["실행 결과 / 상세 기록<br/>생성 파일 다운로드"]
+    L -->|취소| O["cancelled"]
+```
+
+### 모델에 넣는 system 내용 (요약)
+
+```mermaid
+flowchart LR
+    P[Persona] --> S[system 1개]
+    U[유저 프로필] --> S
+    D[활성 데이터셋 요약] --> S
+    F[첨부 파일 지시 + 경로] --> S
+    S --> M[messages 배열]
+    H[user/assistant 히스토리] --> M
+    M --> O[Ollama]
+```
+
+파일이 없으면 **첨부 파일 지시 + 경로** 블록은 포함되지 않습니다.
+
+| 블록 | 출처 |
+|------|------|
+| Persona | Preset 3종 + Custom (`app_settings.json`) |
+| 사용자 정보 | `user_profile.json` (입력된 항목만) |
+| 활성 데이터셋 | `st.session_state.df` 요약 |
+| 첨부 파일 | 요약 + workspace 경로 + `CODE_AGENT_INSTRUCTION` |
+
+> API 페이로드, 함수명, ASCII 파이프라인은 아래 **「LLM 요청이 만들어지는 방식」**, **「사용자 메시지 1회 처리 파이프라인」**, **「파일 첨부 · 코드 실행 구조」** 를 참고하세요.
+
 ## 기술 스택
 
 | 구분 | 기술 |
@@ -18,7 +104,7 @@ Streamlit 기반 AI 대화 도구입니다.
 
 ## 파일 첨부 · 코드 실행 구조
 
-파일이 있거나 활성 데이터셋(`df`)이 있으면, 모델이 ` ```python ` 블록을 내면 **자동 실행하지 않고** 승인 UI를 띄웁니다.
+파일이 있거나 활성 데이터셋(`df`)이 있으면, 모델이 ` ```python ` 블록을 내면 **자동 실행하지 않고** 승인 UI를 띄웁니다. 아래 시퀀스는 **승인 이후 workspace 실행** 단계를 시간 순으로 보여 줍니다.
 
 ```mermaid
 sequenceDiagram
@@ -36,8 +122,8 @@ sequenceDiagram
     alt 실행 승인
         U->>S: ✅ 실행 승인
         S->>W: _run_script.py 작성 후 subprocess 실행
-        W-->>S: stdout/stderr, 신규 파일 목록
-        S->>U: 결과 + 생성 파일 다운로드
+        W-->>S: 실행 결과 / 상세 기록, 신규 파일 목록
+        S->>U: 실행 로그 + 생성 파일 다운로드
     else 실행 취소
         U->>S: ❌ 실행 취소
     end
