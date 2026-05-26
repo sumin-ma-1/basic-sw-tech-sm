@@ -4,7 +4,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| UI 프레임워크 | Streamlit (별도 랜딩 페이지 없음 — 실행 즉시 채팅 화면) |
+| UI 프레임워크 | Streamlit (`st.navigation` — **AI 채팅** · **Ollama 관리**) |
 | LLM | Ollama `POST /api/chat` |
 | 진입점 | `app.py` |
 | 기본 URL | `http://localhost:8507` |
@@ -22,6 +22,7 @@ basic-sw-tech-sm/
 ├── app.py                    # UI · Ollama · 파일 · 코드 실행 (전부 여기)
 ├── requirements.txt          # Python 패키지
 ├── sm_final.png              # 브라우저 탭 파비콘
+├── docs/screenshots/         # README용 사용 화면 캡처 (PNG)
 ├── .streamlit/config.toml    # Streamlit 서버 설정 (포트 8507)
 ├── chat_history/             # 실행 중 생성 (대화·프로필·workspace)
 └── README.md
@@ -45,8 +46,10 @@ flowchart LR
     end
 
     subgraph App["app.py"]
-        Side["사이드바<br/>Ollama · Persona · 프로필 · 히스토리"]
+        Nav["사이드바 네비<br/>AI 채팅 · Ollama 관리"]
+        Side["채팅 사이드바<br/>Ollama · Persona · 프로필 · 히스토리"]
         Main["메인<br/>대화 목록 + chat_input"]
+        Nav --- Side
         Side --- Main
     end
 
@@ -215,19 +218,37 @@ sequenceDiagram
 
 ---
 
-## 실행 결과 캡쳐
+## 사용 화면 캡쳐
+
+스크린샷은 [`docs/screenshots/`](docs/screenshots/) 폴더에 PNG로 넣습니다. 파일명은 아래와 맞추면 README에 바로 연결됩니다.
+
+| 파일 | 설명 |
+|------|------|
+| `ollama-management.png` | **Ollama 관리** 페이지 |
+| `ai-chat.png` | **AI 채팅** 메인 (선택) |
+| `persona.png` | Persona 생성·관리 (선택) |
+| `code-execution.png` | 코드 승인·실행 결과 (선택) |
+
+### Ollama 관리
+
+SSH 터널로 원격 Ollama에 연결한 뒤, 모델 목록 확인·`pull` 다운로드·삭제를 할 수 있습니다.
+
+<!-- 캡처 후 docs/screenshots/ollama-management.png 로 저장 -->
+<img width="1997" height="1891" alt="오라마 관리" src="https://github.com/user-attachments/assets/ff921a78-2f98-46d2-994b-244ac426d21e" />
 
 ### 요청 의도별 코드 생성
 
 사용자의 승인을 받아 실행 후에 생성된 파일을 받을 수 있습니다.
 
-<img width="1997" height="1891" alt="Image" src="https://github.com/user-attachments/assets/9cf8313c-3b0f-4050-b84f-be0ed319ce8d" />
+<!-- 로컬 캡처로 교체 시: docs/screenshots/code-execution.png -->
+<img width="1997" height="1891" alt="코드 실행 승인 및 결과 파일 다운로드" src="https://github.com/user-attachments/assets/9cf8313c-3b0f-4050-b84f-be0ed319ce8d" />
 
 ### 시스템 프롬프팅 페르소나화
 
 프리셋 페르소나 외 사용자가 생성 및 관리할 수 있습니다.
 
-<img width="1997" height="1687" alt="Image" src="https://github.com/user-attachments/assets/b6470f32-29fd-4125-b9f7-46f85bb812bc" />
+<!-- 로컬 캡처로 교체 시: docs/screenshots/persona.png -->
+<img width="1997" height="1687" alt="Persona 프리셋 및 커스텀 관리" src="https://github.com/user-attachments/assets/b6470f32-29fd-4125-b9f7-46f85bb812bc" />
 
 ---
 
@@ -239,19 +260,22 @@ sequenceDiagram
 flowchart TD
     S1["set_page_config · 파비콘"] --> S2["init_session_state"]
     S2 --> S3["디스크에서 chat · profile · persona 로드"]
-    S3 --> S4["render_sidebar"]
-    S4 --> S5["render_ai_chat · chat_input 대기"]
-    S5 --> S6{"입력?"}
-    S6 -->|Yes| S7["Ollama 호출 · 저장 · rerun"]
-    S7 --> S5
+    S3 --> S4["st.navigation<br/>AI 채팅 · Ollama 관리"]
+    S4 --> S5["render_sidebar + render_ai_chat"]
+    S5 --> S6["chat_input 대기"]
+    S6 --> S7{"입력?"}
+    S7 -->|Yes| S8["Ollama 호출 · 저장 · rerun"]
+    S8 --> S6
 ```
 
 | 단계 | 함수 | 설명 |
 |------|------|------|
 | 1 | `main()` | 페이지 설정 |
 | 2 | `init_session_state()` | 세션 초기화, `chat_history/` 로드 |
-| 3 | `render_sidebar()` | Ollama, Persona, 프로필, 히스토리 |
-| 4 | `render_ai_chat()` | 채팅 렌더링·입력 처리 |
+| 3 | `st.navigation` | **AI 채팅** / **Ollama 관리** 페이지 전환 |
+| 4 | `render_sidebar()` | Ollama, Persona, 프로필, 히스토리 (채팅 페이지) |
+| 5 | `render_ai_chat()` | 채팅 렌더링·입력 처리 |
+| — | `render_ollama_page()` | Ollama 관리 — 모델 목록·pull·삭제 |
 
 ---
 

@@ -1,4 +1,4 @@
-"""Streamlit AI 대화 도구 (Ollama 로컬 LLM · 채팅 파일 업로드)."""
+"""Streamlit AI 대화 도구 (Ollama 로 로컬 LLM · 채팅 파일 업로드)."""
 
 from __future__ import annotations
 
@@ -13,12 +13,18 @@ import urllib.request
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import pandas as pd
 import streamlit as st
 
 DEFAULT_OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+# Material Symbols (rounded) — https://fonts.google.com/icons
+ICON_PAGE_CHAT = ":material/chat:"
+ICON_PAGE_OLLAMA = ":material/memory:"
+ICON_REFRESH = ":material/refresh:"
+ICON_DOWNLOAD = ":material/download:"
+ICON_DELETE = ":material/delete:"
 PRESET_PREFIX = "preset:"
 CUSTOM_PREFIX = "custom:"
 PERSONA_PRESETS: dict[str, dict[str, str]] = {
@@ -629,6 +635,7 @@ def init_session_state() -> None:
         "df": None,
         "df_name": None,
         "ollama_models": [],
+        "ollama_base_url": DEFAULT_OLLAMA_URL,
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -810,14 +817,113 @@ def render_chat_history_manager() -> None:
                 st.error(f"가져오기 실패: {exc}")
 
 
+def ollama_request(
+    base_url: str,
+    path: str,
+    *,
+    method: str = "GET",
+    payload: dict[str, Any] | None = None,
+    timeout: float = 30,
+) -> dict[str, Any]:
+    url = f"{base_url.rstrip('/')}{path}"
+    data = json.dumps(payload).encode() if payload is not None else None
+    headers = {"Content-Type": "application/json"} if data else {}
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        body = resp.read()
+    if not body:
+        return {}
+    return json.loads(body)
+
+
 def fetch_ollama_models(base_url: str) -> list[str]:
-    url = f"{base_url.rstrip('/')}/api/tags"
     try:
-        with urllib.request.urlopen(url, timeout=5) as resp:
-            data = json.loads(resp.read())
+        data = ollama_request(base_url, "/api/tags", timeout=5)
         return sorted(m["name"] for m in data.get("models", []))
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError):
         return []
+
+
+def fetch_ollama_version(base_url: str) -> str | None:
+    try:
+        data = ollama_request(base_url, "/api/version", timeout=5)
+        return data.get("version")
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError):
+        return None
+
+
+def pull_ollama_model(
+    base_url: str,
+    name: str,
+    *,
+    on_update: Callable[[float | None, str], None] | None = None,
+) -> tuple[bool, str]:
+    model_name = name.strip()
+    if not model_name:
+        return False, "모델 이름을 입력하세요."
+
+    url = f"{base_url.rstrip('/')}/api/pull"
+    payload = json.dumps({"name": model_name, "stream": True}).encode()
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=3600) as resp:
+            for raw in resp:
+                line = raw.decode(errors="replace").strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                status = str(event.get("status", ""))
+                total = event.get("total")
+                completed = event.get("completed")
+                if on_update:
+                    if isinstance(total, int) and total > 0 and isinstance(completed, int):
+                        on_update(min(completed / total, 1.0), status)
+                    else:
+                        on_update(None, status)
+                if status == "success":
+                    return True, f"「{model_name}」 다운로드 완료"
+        return False, "다운로드가 중단되었습니다."
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode(errors="replace")
+        return False, f"HTTP {exc.code}: {body}"
+    except (urllib.error.URLError, TimeoutError) as exc:
+        return False, str(exc)
+
+
+def delete_ollama_model(base_url: str, name: str) -> tuple[bool, str]:
+    model_name = name.strip()
+    if not model_name:
+        return False, "삭제할 모델을 선택하세요."
+    url = f"{base_url.rstrip('/')}/api/delete"
+    payload = json.dumps({"name": model_name}).encode()
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="DELETE",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            resp.read()
+        return True, f"「{model_name}」 삭제됨"
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode(errors="replace")
+        return False, f"HTTP {exc.code}: {body}"
+    except (urllib.error.URLError, TimeoutError) as exc:
+        return False, str(exc)
+
+
+def sync_ollama_base_url(base_url: str) -> str:
+    st.session_state.ollama_base_url = base_url.rstrip("/") or DEFAULT_OLLAMA_URL
+    return st.session_state.ollama_base_url
 
 
 def read_file_bytes(uploaded_file: Any) -> bytes:
@@ -1131,6 +1237,122 @@ def call_ollama(
     return data.get("message", {}).get("content", "")
 
 
+def render_ollama_page() -> None:
+    st.title("Ollama 관리")
+    st.caption("모델 다운로드·삭제·상태 확인 · URL은 **AI 채팅** 사이드바와 공유됩니다")
+
+    base_url = sync_ollama_base_url(
+        st.text_input(
+            "Ollama URL",
+            value=st.session_state.ollama_base_url,
+            key="ollama_page_url",
+            placeholder="http://localhost:11434",
+        )
+    )
+
+    if st.button(
+        "연결·목록 새로고침",
+        icon=ICON_REFRESH,
+        help="Ollama 연결 및 설치 모델 목록 갱신",
+    ):
+        st.session_state.ollama_models = fetch_ollama_models(base_url)
+        st.rerun()
+
+    connected = bool(st.session_state.ollama_models)
+    if not connected:
+        st.session_state.ollama_models = fetch_ollama_models(base_url)
+        connected = bool(st.session_state.ollama_models)
+
+    models = st.session_state.ollama_models or []
+    version = fetch_ollama_version(base_url) if connected else None
+
+    if connected:
+        label = f"연결됨 · {len(models)}개 모델"
+        if version:
+            label += f" · v{version}"
+        st.success(label)
+    else:
+        st.warning("미연결 — URL · SSH 터널 · `ollama serve` 확인")
+
+    st.divider()
+    st.subheader("설치된 모델")
+    if models:
+        st.selectbox(
+            "모델",
+            models,
+            key="ollama_installed_select",
+            disabled=not connected,
+        )
+    elif connected:
+        st.info("설치된 모델이 없습니다. 아래에서 받을 수 있습니다.")
+    else:
+        st.warning("목록을 불러올 수 없습니다.")
+
+    st.divider()
+    st.subheader("모델 받기")
+    st.caption(
+        "예: `qwen3:8b`, `llama3.2` · [Ollama 라이브러리](https://ollama.com/library)"
+    )
+    pull_name = st.text_input(
+        "모델 이름",
+        placeholder="qwen3:8b",
+        key="ollama_pull_name",
+        disabled=not connected,
+    )
+    if st.button(
+        "다운로드 시작",
+        type="primary",
+        icon=ICON_DOWNLOAD,
+        disabled=not connected,
+    ):
+        if not pull_name.strip():
+            st.error("모델 이름을 입력하세요.")
+        else:
+            progress = st.progress(0.0, text="준비 중…")
+            status_box = st.empty()
+
+            def on_pull_update(ratio: float | None, status: str) -> None:
+                label = status or "다운로드 중…"
+                if ratio is not None:
+                    progress.progress(ratio, text=label)
+                else:
+                    progress.progress(0.0, text=label)
+                status_box.caption(label)
+
+            ok, message = pull_ollama_model(
+                base_url, pull_name, on_update=on_pull_update
+            )
+            progress.empty()
+            status_box.empty()
+            if ok:
+                st.success(message)
+                st.session_state.ollama_models = fetch_ollama_models(base_url)
+                st.rerun()
+            else:
+                st.error(message)
+
+    st.divider()
+    st.subheader("모델 삭제")
+    if not connected or not models:
+        st.caption("연결되고 모델이 있을 때 삭제할 수 있습니다.")
+    else:
+        delete_name = st.session_state.get("ollama_installed_select", models[0])
+        st.caption(f"삭제 대상: **{delete_name}** (위 목록에서 선택)")
+        confirm = st.checkbox("삭제 확인", key="ollama_delete_confirm")
+        if st.button(
+            "선택 모델 삭제",
+            icon=ICON_DELETE,
+            disabled=not confirm,
+        ):
+            ok, message = delete_ollama_model(base_url, delete_name)
+            if ok:
+                st.success(message)
+                st.session_state.ollama_models = fetch_ollama_models(base_url)
+                st.rerun()
+            else:
+                st.error(message)
+
+
 def render_sidebar() -> dict[str, Any]:
     with st.sidebar:
         if st.button(profile_button_label(), use_container_width=True):
@@ -1138,9 +1360,19 @@ def render_sidebar() -> dict[str, Any]:
 
         st.subheader("Ollama")
 
-        base_url = st.text_input("Ollama URL", value=DEFAULT_OLLAMA_URL)
+        base_url = sync_ollama_base_url(
+            st.text_input(
+                "Ollama URL",
+                value=st.session_state.ollama_base_url,
+                key="chat_ollama_url",
+            )
+        )
 
-        if st.button("모델 목록 새로고침", use_container_width=True):
+        if st.button(
+            "모델 목록 새로고침",
+            icon=ICON_REFRESH,
+            use_container_width=True,
+        ):
             st.session_state.ollama_models = fetch_ollama_models(base_url)
             st.rerun()
 
@@ -1152,6 +1384,8 @@ def render_sidebar() -> dict[str, Any]:
             st.success(f"연결됨 · {len(models)}개 모델")
         else:
             st.warning("Ollama 미연결")
+
+        st.caption("모델 받기·삭제는 사이드바 **Ollama 관리** 페이지에서")
 
         model = st.selectbox("모델", models)
 
@@ -1398,17 +1632,30 @@ def render_ai_chat(settings: dict[str, Any]) -> None:
     st.rerun()
 
 
+def page_chat() -> None:
+    settings = render_sidebar()
+    render_ai_chat(settings)
+
+
+def page_ollama() -> None:
+    render_ollama_page()
+
+
 def main() -> None:
     favicon = Path(__file__).parent / "sm_final.png"
     st.set_page_config(
         page_title="Basic Software Technology",
-        page_icon=str(favicon) if favicon.exists() else "💬",
+        page_icon=str(favicon) if favicon.exists() else ICON_PAGE_CHAT,
         layout="wide",
     )
 
     init_session_state()
-    settings = render_sidebar()
-    render_ai_chat(settings)
+
+    chat_page = st.Page(
+        page_chat, title="AI 채팅", icon=ICON_PAGE_CHAT, default=True
+    )
+    ollama_page = st.Page(page_ollama, title="Ollama 관리", icon=ICON_PAGE_OLLAMA)
+    st.navigation([chat_page, ollama_page]).run()
 
 
 if __name__ == "__main__":
