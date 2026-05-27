@@ -17,7 +17,7 @@
 4. [랜딩페이지](#landing-page)
 5. [실행 스크립트](#run-script)
 6. [사용 화면 캡처](#usage-screenshots)
-7. [Claude Code/Codex skill과의 연관](#ai-codex-skills)
+7. [Claude Code / Codex skill과의 연관](#ai-codex-skills)
 
 ---
 
@@ -313,7 +313,7 @@ Ollama 관리 페이지 상단에서 **서버 리소스**를 확인할 수 있�
 - **메모리 로드 / VRAM 로드 합계**: 현재 메모리에 올라간 모델과 VRAM 사용량 (`/api/ps` 기반)
 - (지원 시) **시스템 RAM / GPU VRAM**도 함께 표시됩니다. (`/api/info`가 없는 버전에서는 일부 항목이 제한될 수 있습니다.)
 
-<img width="800" alt="서버 리소스" src=""https://github.com/user-attachments/assets/6dd2462d-c05a-4f97-ac0a-c74886ae543a" />
+<img width="800" alt="서버 리소스" src="https://github.com/user-attachments/assets/6dd2462d-c05a-4f97-ac0a-c74886ae543a" />
 
 ### 즉시 응답 / 추론 응답
 
@@ -329,7 +329,7 @@ Ollama 관리 페이지 상단에서 **서버 리소스**를 확인할 수 있�
 
 <a id="ai-codex-skills"></a>
 
-## Claude Code/Codex skill과의 연관
+## Claude Code / Codex skill과의 연관
 
 Claude Code / Codex 계열의 **코드 에이전트 skill**을, 본 구현의 기능과 연결하면 다음처럼 정리할 수 있습니다.
 
