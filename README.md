@@ -272,19 +272,19 @@ streamlit run main.py         # .streamlit/config.toml → 포트 8507 (수정 �
 
 사용자의 승인을 받아 코드를 실행한 뒤, 생성된 결과 파일을 다운로드할 수 있습니다.
 
-<img width="800" alt="코드 실행 승인 및 결과 파일 다운로드" src="https://github.com/user-attachments/assets/ff605ac5-9114-46db-8093-bc5b9aa8a09c" />
+<img width="800" alt="코드 실행 승인 및 결과 파일 다운로드" src="https://github.com/user-attachments/assets/86464fe5-36e3-499c-9b3f-c7d08694d4fb" />
 
 ### 시스템 프롬프팅 페르소나화
 
 프리셋 페르소나 외에도 사용자가 원하는 페르소나를 제한 없이 생성하고 관리할 수 있습니다.
 
-<img width="800" alt="시스템 프롬프팅 페르소나화" src="https://github.com/user-attachments/assets/cec41faa-9127-4a2f-b71d-3b7360124488" />
+<img width="800" alt="시스템 프롬프팅 페르소나화" src="https://github.com/user-attachments/assets/ef91b7e8-9b4d-417d-a083-b554e022746f" />
 
 ### 사용자 프로필
 
 채팅 사이드바에서 `이름`, `호칭`, `언어`, `시간대`, `자기소개`를 선택 입력하면, 이후 대화의 시스템 메시지에 전역 변수로 반영되어 맞춤 응답에 활용됩니다.
 
-<img width="800" alt="사용자 프로필 설정" src="https://github.com/user-attachments/assets/108635f9-05fe-470b-ae03-771eec2370dc" />
+<img width="800" alt="사용자 프로필 설정" src="https://github.com/user-attachments/assets/300db74a-c89b-473f-9dc4-ddd689824a4f" />
 
 ### Ollama 관리
 
@@ -300,4 +300,4 @@ SSH 터널로 원격 Ollama에 연결한 뒤, 모델 목록 확인, `pull` 다�
 - **추론**: 모델의 thinking 출력을 **추론 과정 (Thinking)** expander에 표시한 뒤, 최종 답변을 본문에 표시합니다 (`think: true`). 완료 후 caption 예: `추론 · 12.1초`.
 - 추론 기능이 없는 모델: 클릭 요소가 표시되지 않으며, 일반 채팅과 동일하게 동작합니다.
 
-<img width="800" alt="즉시 또는 추론 모드" src="https://github.com/user-attachments/assets/2d97ac92-8011-4629-ab73-7ca6322b382e" />
+<img width="800" alt="즉시 또는 추론 모드" src="https://github.com/user-attachments/assets/05293d6f-dea0-484b-9afc-b43c6f053a5e" />
