@@ -278,7 +278,7 @@ streamlit run main.py         # .streamlit/config.toml → 포트 8507 (수정 �
 
 프리셋 페르소나 외 사용자가 생성 및 관리할 수 있습니다.
 
-<img width="1997" height="1687" alt="Persona 프리셋 및 커스텀 관리" src="https://github.com/user-attachments/assets/b6470f32-29fd-4125-b9f7-46f85bb812bc" />
+<img width="1997" height="1687" alt="Persona 프리셋 및 커스텀 관리" src="https://github.com/user-attachments/assets/9e38cd40-d05f-4950-8cc1-3082da872343" />
 
 ### Ollama 관리
 

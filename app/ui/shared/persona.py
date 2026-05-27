@@ -260,7 +260,6 @@ def custom_persona_create_dialog() -> None:
 @st.dialog("시스템 프롬프트 관리", width="large")
 def system_prompt_manage_dialog() -> None:
     st.markdown("##### 프리셋")
-    st.caption("기본 제공 Persona입니다.")
     for key, meta in PERSONA_PRESETS.items():
         persona_id = f"{PRESET_PREFIX}{key}"
         is_active = st.session_state.selected_persona_id == persona_id
