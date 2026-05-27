@@ -290,7 +290,7 @@ streamlit run main.py         # .streamlit/config.toml → 포트 8507 (수정 �
 
 SSH 터널로 원격 Ollama에 연결한 뒤, 모델 목록 확인, `pull` 다운로드, 삭제를 할 수 있습니다.
 
-<img width="800" alt="Ollama 관리" src="https://github.com/user-attachments/assets/ff921a78-2f98-46d2-994b-244ac426d21e" />
+<img width="800" alt="Ollama 관리" src="https://github.com/user-attachments/assets/e2bb3800-b0b2-4c53-9a02-9f020ffb6cce" />
 
 ### 즉시 응답 / 추론 응답
 
