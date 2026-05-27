@@ -5,6 +5,9 @@ from typing import Any, Callable
 
 import streamlit as st
 
+from app.config import ICON_DOWNLOAD
+from app.ui.chat.thinking_status import format_thinking_label
+
 
 def render_execution_downloads(workspace: Path, filenames: list[str]) -> None:
     st.markdown("**생성된 파일**")
@@ -19,11 +22,12 @@ def render_execution_downloads(workspace: Path, filenames: list[str]) -> None:
         elif fname.lower().endswith((".png", ".jpg", ".jpeg")):
             mime = f"image/{fname.rsplit('.', 1)[-1]}"
         st.download_button(
-            f"⬇ {fname}",
+            fname,
             data=data,
             file_name=fname,
             mime=mime,
             key=f"dl_{workspace.name}_{fname}",
+            icon=ICON_DOWNLOAD,
             use_container_width=True,
         )
 
@@ -115,6 +119,17 @@ def render_message(
     render_code_execution_panel_cb: Callable[[dict[str, Any], int], None],
 ) -> None:
     with st.chat_message(msg["role"]):
+        if msg["role"] == "assistant" and msg.get("thinking_seconds") is not None:
+            st.caption(
+                format_thinking_label(
+                    float(msg["thinking_seconds"]),
+                    finished=True,
+                    response_mode=msg.get("response_mode"),
+                )
+            )
+        if msg["role"] == "assistant" and msg.get("thinking_trace"):
+            with st.expander("추론 과정 (Thinking)", expanded=False):
+                st.markdown(msg["thinking_trace"])
         if msg.get("content") and not msg.get("executable_code"):
             st.markdown(msg["content"])
         for f in msg.get("files", []):

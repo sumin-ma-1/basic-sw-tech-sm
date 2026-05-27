@@ -60,7 +60,7 @@ def render_ollama_page(
             label += f" · v{version}"
         st.success(label)
     else:
-        st.warning("미연결 — URL · SSH 터널 · `ollama serve` 확인")
+        st.warning("미연결, URL · SSH 터널 · `ollama serve` 확인")
 
     st.divider()
     st.subheader("설치된 모델")

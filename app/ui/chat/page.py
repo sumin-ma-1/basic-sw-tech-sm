@@ -27,6 +27,8 @@ from app.ui.chat.messages import (
     render_code_execution_panel as ui_render_code_execution_panel,
     render_message as ui_render_message,
 )
+from app.ui.chat.response_mode import render_chat_bottom_bar
+from app.ui.chat.thinking_status import run_with_thinking_status
 from app.ui.components.file_preview import render_file_preview as ui_render_file_preview
 
 CHAT_FILE_TYPES = ["csv", "txt", "md", "json", "xlsx", "xls"]
@@ -73,11 +75,7 @@ def render_ai_chat(settings: dict[str, Any]) -> None:
     for idx, msg in enumerate(messages):
         render_message(msg, idx)
 
-    chat_result = st.chat_input(
-        "질문을 입력하거나 파일을 첨부하세요",
-        accept_file="multiple",
-        file_type=CHAT_FILE_TYPES,
-    )
+    think, send_think, chat_result = render_chat_bottom_bar(settings)
 
     if not chat_result:
         return
@@ -126,33 +124,50 @@ def render_ai_chat(settings: dict[str, Any]) -> None:
         else:
             active_df = st.session_state.df
             ctx = build_active_context(active_df)
-            with st.spinner(f"{settings['model']} 분석 중..."):
-                try:
-                    reply = call_ollama(
+            model = settings["model"]
+            try:
+                response_mode = None
+                if send_think:
+                    response_mode = "thinking" if think else "instant"
+                result, thinking_sec = run_with_thinking_status(
+                    lambda: call_ollama(
                         settings["base_url"],
-                        model=settings["model"],
+                        model=model,
                         system_prompt=settings["system_prompt"],
                         data_context=ctx,
                         temperature=DEFAULT_TEMPERATURE,
                         max_tokens=DEFAULT_MAX_TOKENS,
                         attached_files=files_for_model,
-                    )
-                    st.markdown(reply)
-                    assistant_msg["content"] = reply
-                    if has_attachments:
-                        blocks = code_extract_python_blocks(reply)
-                        if blocks:
-                            assistant_msg["executable_code"] = blocks[-1]
-                            assistant_msg["execution_status"] = "pending"
-                except urllib.error.HTTPError as exc:
-                    body = exc.read().decode(errors="replace")
-                    reply = f"Ollama HTTP 오류 ({exc.code}): {body}"
-                    st.error(reply)
-                    assistant_msg["content"] = reply
-                except Exception as exc:  # noqa: BLE001
-                    reply = f"오류: {exc}"
-                    st.error(reply)
-                    assistant_msg["content"] = reply
+                        think=think,
+                        send_think=send_think,
+                    ),
+                    response_mode=response_mode,
+                )
+                assistant_msg["thinking_seconds"] = round(thinking_sec, 1)
+                assistant_msg["think_enabled"] = think
+                if response_mode:
+                    assistant_msg["response_mode"] = response_mode
+                if result.thinking:
+                    assistant_msg["thinking_trace"] = result.thinking
+                    with st.expander("추론 과정 (Thinking)", expanded=False):
+                        st.markdown(result.thinking)
+                reply = result.content
+                st.markdown(reply)
+                assistant_msg["content"] = reply
+                if has_attachments:
+                    blocks = code_extract_python_blocks(reply)
+                    if blocks:
+                        assistant_msg["executable_code"] = blocks[-1]
+                        assistant_msg["execution_status"] = "pending"
+            except urllib.error.HTTPError as exc:
+                body = exc.read().decode(errors="replace")
+                reply = f"Ollama HTTP 오류 ({exc.code}): {body}"
+                st.error(reply)
+                assistant_msg["content"] = reply
+            except Exception as exc:  # noqa: BLE001
+                reply = f"오류: {exc}"
+                st.error(reply)
+                assistant_msg["content"] = reply
 
     append_message(assistant_msg)
     st.rerun()

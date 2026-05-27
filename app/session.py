@@ -93,6 +93,7 @@ def init_session_state() -> None:
         "df_name": None,
         "ollama_models": [],
         "ollama_base_url": DEFAULT_OLLAMA_URL,
+        "ollama_think": False,
     }
     state_init_session_state(
         defaults=defaults,

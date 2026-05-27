@@ -6,7 +6,7 @@ from pathlib import Path
 # Defaults
 DEFAULT_OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 
-# Material Symbols (rounded) — https://fonts.google.com/icons
+# Material Symbols (rounded), https://fonts.google.com/icons
 ICON_PAGE_CHAT = ":material/chat:"
 ICON_PAGE_OLLAMA = ":material/memory:"
 ICON_REFRESH = ":material/refresh:"

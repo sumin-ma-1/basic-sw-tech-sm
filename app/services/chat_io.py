@@ -27,6 +27,14 @@ def serialize_message(msg: dict[str, Any]) -> dict[str, Any]:
         out["execution_status"] = msg.get("execution_status")
         if msg.get("execution_result") is not None:
             out["execution_result"] = msg["execution_result"]
+    if msg.get("thinking_seconds") is not None:
+        out["thinking_seconds"] = msg["thinking_seconds"]
+    if msg.get("think_enabled") is not None:
+        out["think_enabled"] = msg["think_enabled"]
+    if msg.get("response_mode"):
+        out["response_mode"] = msg["response_mode"]
+    if msg.get("thinking_trace"):
+        out["thinking_trace"] = msg["thinking_trace"]
     return out
 
 

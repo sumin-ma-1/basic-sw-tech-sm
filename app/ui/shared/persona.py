@@ -14,6 +14,10 @@ CUSTOM_PREFIX = "custom:"
 PERSONA_PRESETS: dict[str, dict[str, str]] = {
     "data_analyst": {
         "label": "데이터 분석가",
+        "summary": (
+            "업로드·활성 데이터 **요약**을 바탕으로 인사이트를 제시합니다. "
+            "한국어·실무 톤이며, **요약에 없는 수치는 추측하지 않습니다**."
+        ),
         "prompt": (
             "당신은 데이터 분석 전문가입니다. 업로드된 데이터 요약을 바탕으로 "
             "한국어로 명확하고 실용적인 인사이트를 제공하세요. "
@@ -22,6 +26,10 @@ PERSONA_PRESETS: dict[str, dict[str, str]] = {
     },
     "code_assistant": {
         "label": "코딩 어시스턴트",
+        "summary": (
+            "코드 작성·디버깅·리팩터링·알고리즘 설명에 특화됩니다. "
+            "**실행 가능한 예시**를 선호하고, 가정·전제는 명시합니다."
+        ),
         "prompt": (
             "당신은 숙련된 소프트웨어 개발 어시스턴트입니다. "
             "코드 작성, 디버깅, 리팩터링, 알고리즘 설명을 한국어로 명확히 도와주세요. "
@@ -30,6 +38,10 @@ PERSONA_PRESETS: dict[str, dict[str, str]] = {
     },
     "learning_mentor": {
         "label": "학습 멘토",
+        "summary": (
+            "개념을 **단계별·쉬운 말**로 설명하고, 비유·짧은 예시를 씁니다. "
+            "학습자 수준에 맞춰 질문을 유도하며 **격려하는 톤**을 유지합니다."
+        ),
         "prompt": (
             "당신은 친절한 학습 멘토입니다. "
             "개념을 단계별로 쉽게 설명하고, 비유와 짧은 예시를 활용하세요. "
@@ -39,6 +51,69 @@ PERSONA_PRESETS: dict[str, dict[str, str]] = {
 }
 DEFAULT_PERSONA_KEY = "data_analyst"
 DEFAULT_SELECTED_PERSONA = f"{PRESET_PREFIX}{DEFAULT_PERSONA_KEY}"
+
+PERSONA_CREATE_HINT = (
+    "코드 실행·첨부 파일·데이터셋 규칙은 앱이 대화 시 자동으로 추가합니다."
+)
+
+
+def render_in_use_badge() -> None:
+    st.badge("사용 중", icon=":material/check_circle:", color="green")
+
+
+def compose_persona_prompt(role: str, style: str = "", constraints: str = "") -> str:
+    parts: list[str] = []
+    if role.strip():
+        parts.append(role.strip())
+    if style.strip():
+        parts.append(f"응답 방식: {style.strip()}")
+    if constraints.strip():
+        parts.append(f"주의사항: {constraints.strip()}")
+    return "\n\n".join(parts)
+
+
+def persona_field_values(persona: dict[str, str]) -> tuple[str, str, str]:
+    if "role" in persona or "style" in persona or "constraints" in persona:
+        return (
+            persona.get("role", ""),
+            persona.get("style", ""),
+            persona.get("constraints", ""),
+        )
+    return (persona.get("prompt", ""), "", "")
+
+
+def render_persona_part_fields(
+    key_prefix: str,
+    *,
+    role: str = "",
+    style: str = "",
+    constraints: str = "",
+    show_hint: bool = True,
+) -> tuple[str, str, str]:
+    if show_hint:
+        st.caption(PERSONA_CREATE_HINT)
+    role_val = st.text_area(
+        "역할",
+        value=role,
+        height=100,
+        placeholder="예: 당신은 통계·데이터 분석을 돕는 전문가입니다.",
+        key=f"{key_prefix}_role",
+    )
+    style_val = st.text_area(
+        "응답 방식",
+        value=style,
+        height=80,
+        placeholder="예: 한국어로 단계별 설명, 표·요약을 활용, 초보자도 이해하기 쉽게",
+        key=f"{key_prefix}_style",
+    )
+    constraints_val = st.text_area(
+        "주의사항",
+        value=constraints,
+        height=80,
+        placeholder="예: 요약에 없는 수치는 추측하지 말 것, 불확실하면 명시",
+        key=f"{key_prefix}_constraints",
+    )
+    return role_val, style_val, constraints_val
 
 
 def save_app_settings() -> None:
@@ -65,10 +140,14 @@ def migrate_app_settings(data: dict[str, Any]) -> dict[str, Any]:
         legacy_prompt = data.get("custom_system_prompt", "")
         if legacy_prompt.strip():
             cid = str(uuid.uuid4())
+            legacy = legacy_prompt.strip()
             custom_personas[cid] = {
                 "id": cid,
                 "title": "커스텀",
-                "prompt": legacy_prompt.strip(),
+                "prompt": legacy,
+                "role": legacy,
+                "style": "",
+                "constraints": "",
                 "created_at": now_iso(),
                 "updated_at": now_iso(),
             }
@@ -92,9 +171,9 @@ def build_persona_ids() -> list[str]:
 def persona_display_label(persona_id: str) -> str:
     if persona_id.startswith(PRESET_PREFIX):
         key = persona_id.removeprefix(PRESET_PREFIX)
-        return PERSONA_PRESETS[key]["label"]
+        return f"{PERSONA_PRESETS[key]['label']}"
     cid = persona_id.removeprefix(CUSTOM_PREFIX)
-    return st.session_state.custom_personas[cid]["title"]
+    return f"{st.session_state.custom_personas[cid]['title']}"
 
 
 def ensure_valid_selected_persona() -> None:
@@ -117,27 +196,35 @@ def resolve_system_prompt() -> str:
 
 
 def upsert_custom_persona(
-    title: str, prompt: str, persona_id: str | None = None
+    title: str,
+    *,
+    role: str,
+    style: str = "",
+    constraints: str = "",
+    persona_id: str | None = None,
 ) -> str:
+    prompt = compose_persona_prompt(role, style, constraints)
     ts = now_iso()
+    record = {
+        "id": "",
+        "title": title,
+        "prompt": prompt,
+        "role": role.strip(),
+        "style": style.strip(),
+        "constraints": constraints.strip(),
+    }
     if persona_id is None:
         persona_id = str(uuid.uuid4())
-        st.session_state.custom_personas[persona_id] = {
-            "id": persona_id,
-            "title": title,
-            "prompt": prompt,
-            "created_at": ts,
-            "updated_at": ts,
-        }
+        record["id"] = persona_id
+        record["created_at"] = ts
+        record["updated_at"] = ts
+        st.session_state.custom_personas[persona_id] = record
     else:
         existing = st.session_state.custom_personas[persona_id]
-        st.session_state.custom_personas[persona_id] = {
-            "id": persona_id,
-            "title": title,
-            "prompt": prompt,
-            "created_at": existing.get("created_at", ts),
-            "updated_at": ts,
-        }
+        record["id"] = persona_id
+        record["created_at"] = existing.get("created_at", ts)
+        record["updated_at"] = ts
+        st.session_state.custom_personas[persona_id] = record
     return persona_id
 
 
@@ -149,25 +236,51 @@ def delete_custom_persona(persona_id: str) -> None:
 
 @st.dialog("커스텀 Persona 생성", width="large")
 def custom_persona_create_dialog() -> None:
-    st.caption("새 커스텀 Persona를 작성하고 저장하세요.")
-    title = st.text_input("이름", placeholder="예: 통계 튜터")
-    prompt = st.text_area(
-        "시스템 프롬프트",
-        height=220,
-        placeholder="모델에게 전달할 역할·지침을 작성하세요.",
-    )
+    st.caption("역할·응답 방식·주의사항을 나눠 작성하면 저장 시 하나의 시스템 프롬프트로 합쳐집니다.")
+    title = st.text_input("이름", placeholder="예: 통계 튜터", key="persona_create_title")
+    role, style, constraints = render_persona_part_fields("persona_create")
     if st.button("저장", type="primary", use_container_width=True):
-        if not title.strip() or not prompt.strip():
-            st.error("이름과 시스템 프롬프트를 모두 입력해 주세요.")
+        if not title.strip():
+            st.error("이름을 입력해 주세요.")
             return
-        new_id = upsert_custom_persona(title.strip(), prompt.strip())
+        if not role.strip():
+            st.error("역할을 입력해 주세요.")
+            return
+        new_id = upsert_custom_persona(
+            title.strip(),
+            role=role,
+            style=style,
+            constraints=constraints,
+        )
         st.session_state.selected_persona_id = f"{CUSTOM_PREFIX}{new_id}"
         save_app_settings()
         st.rerun()
 
 
-@st.dialog("커스텀 Persona 관리", width="large")
-def custom_persona_manage_dialog() -> None:
+@st.dialog("시스템 프롬프트 관리", width="large")
+def system_prompt_manage_dialog() -> None:
+    st.markdown("##### 프리셋")
+    st.caption("기본 제공 Persona입니다.")
+    for key, meta in PERSONA_PRESETS.items():
+        persona_id = f"{PRESET_PREFIX}{key}"
+        is_active = st.session_state.selected_persona_id == persona_id
+        with st.container(border=True):
+            if is_active:
+                render_in_use_badge()
+            with st.expander(meta["label"], expanded=is_active):
+                st.markdown(meta["summary"])
+                if st.button(
+                    "이 Persona 사용",
+                    key=f"use_preset_{key}",
+                    use_container_width=True,
+                    disabled=is_active,
+                ):
+                    st.session_state.selected_persona_id = persona_id
+                    save_app_settings()
+                    st.rerun()
+
+    st.divider()
+    st.markdown("##### 커스텀")
     customs = st.session_state.custom_personas
     if not customs:
         st.info("저장된 커스텀 Persona가 없습니다. '새로 생성하기'로 추가하세요.")
@@ -177,30 +290,53 @@ def custom_persona_manage_dialog() -> None:
         customs.values(), key=lambda p: p["updated_at"], reverse=True
     ):
         pid = persona["id"]
-        with st.expander(f"{persona['title']} · {persona['updated_at']}"):
-            edit_title = st.text_input("이름", value=persona["title"], key=f"mt_{pid}")
-            edit_prompt = st.text_area(
-                "시스템 프롬프트",
-                value=persona["prompt"],
-                height=160,
-                key=f"mp_{pid}",
-            )
-            col_save, col_del = st.columns(2)
-            with col_save:
-                if st.button("저장", key=f"ms_{pid}", use_container_width=True):
-                    if not edit_title.strip() or not edit_prompt.strip():
-                        st.error("이름과 프롬프트를 입력해 주세요.")
-                    else:
-                        upsert_custom_persona(
-                            edit_title.strip(), edit_prompt.strip(), pid
-                        )
-                        save_app_settings()
-                        st.rerun()
-            with col_del:
-                if st.button("삭제", key=f"md_{pid}", use_container_width=True):
-                    delete_custom_persona(pid)
+        persona_id = f"{CUSTOM_PREFIX}{pid}"
+        is_active = st.session_state.selected_persona_id == persona_id
+        with st.container(border=True):
+            if is_active:
+                render_in_use_badge()
+            with st.expander(persona["title"], expanded=is_active):
+                st.caption(persona["updated_at"])
+                if st.button(
+                    "이 Persona 사용",
+                    key=f"use_custom_{pid}",
+                    use_container_width=True,
+                    disabled=is_active,
+                ):
+                    st.session_state.selected_persona_id = persona_id
                     save_app_settings()
                     st.rerun()
+                edit_title = st.text_input("이름", value=persona["title"], key=f"mt_{pid}")
+                leg_role, leg_style, leg_constraints = persona_field_values(persona)
+                edit_role, edit_style, edit_constraints = render_persona_part_fields(
+                    f"persona_edit_{pid}",
+                    role=leg_role,
+                    style=leg_style,
+                    constraints=leg_constraints,
+                    show_hint=False,
+                )
+                col_save, col_del = st.columns(2)
+                with col_save:
+                    if st.button("저장", key=f"ms_{pid}", use_container_width=True):
+                        if not edit_title.strip():
+                            st.error("이름을 입력해 주세요.")
+                        elif not edit_role.strip():
+                            st.error("역할을 입력해 주세요.")
+                        else:
+                            upsert_custom_persona(
+                                edit_title.strip(),
+                                role=edit_role,
+                                style=edit_style,
+                                constraints=edit_constraints,
+                                persona_id=pid,
+                            )
+                            save_app_settings()
+                            st.rerun()
+                with col_del:
+                    if st.button("삭제", key=f"md_{pid}", use_container_width=True):
+                        delete_custom_persona(pid)
+                        save_app_settings()
+                        st.rerun()
 
 
 def render_system_prompt_section() -> str:
@@ -225,6 +361,6 @@ def render_system_prompt_section() -> str:
             custom_persona_create_dialog()
     with col_manage:
         if st.button("관리", use_container_width=True):
-            custom_persona_manage_dialog()
+            system_prompt_manage_dialog()
 
     return resolve_system_prompt()

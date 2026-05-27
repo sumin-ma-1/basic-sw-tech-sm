@@ -6,6 +6,7 @@ from typing import Any, Callable
 import streamlit as st
 
 from app.api.ollama import fetch_ollama_models
+from app.ui.chat.response_mode import clear_model_capabilities_cache
 from app.ui.shared.persona import render_system_prompt_section
 from app.ui.shared.profile import profile_button_label, user_profile_dialog
 
@@ -161,6 +162,7 @@ def render_sidebar(
             use_container_width=True,
         ):
             st.session_state.ollama_models = fetch_ollama_models(base_url)
+            clear_model_capabilities_cache()
             st.rerun()
 
         if not st.session_state.ollama_models:

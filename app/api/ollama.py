@@ -33,6 +33,27 @@ def fetch_ollama_models(base_url: str) -> list[str]:
         return []
 
 
+def fetch_model_capabilities(base_url: str, model: str) -> list[str]:
+    try:
+        data = ollama_request(
+            base_url,
+            "/api/show",
+            method="POST",
+            payload={"model": model},
+            timeout=10,
+        )
+        caps = data.get("capabilities")
+        if isinstance(caps, list):
+            return [str(c) for c in caps]
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError):
+        pass
+    return []
+
+
+def model_supports_thinking(base_url: str, model: str) -> bool:
+    return "thinking" in fetch_model_capabilities(base_url, model)
+
+
 def fetch_ollama_version(base_url: str) -> str | None:
     try:
         data = ollama_request(base_url, "/api/version", timeout=5)

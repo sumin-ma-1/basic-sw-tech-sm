@@ -96,12 +96,38 @@ sequenceDiagram
 | 신규 파일 | `app/services/workspace.py` · `list_workspace_files()` diff | 실행 전후 파일 비교 → 다운로드 버튼 |
 | 상태 저장 | `app/session.py` · `patch_message()` | `execution_status`, `execution_result` 메시지에 기록 |
 | LLM 호출 | `app/services/chat_llm.py` · `call_ollama()` | `POST /api/chat`, `stream: false` |
+| 응답 모드 | `app/ui/chat/response_mode.py` · `app/services/chat_llm.py` | thinking 지원 모델만 `think: true` / `false` (자세한 내용은 아래) |
+
+### 즉시 응답 / 추론 응답
+
+Ollama **thinking capability**가 있는 모델(qwen3, deepseek-r1 등)만, 채팅 입력창 **바로 위**에서 **즉시** / **추론** pills로 구분합니다. (`POST /api/show` → `capabilities`에 `"thinking"` 포함 여부)
+
+| 모드 | API | 동작 |
+|------|-----|------|
+| **즉시** (`instant`) | `think: false` | 추론 trace 없이 `message.content` 위주로 응답 |
+| **추론** (`thinking`) | `think: true` | `message.thinking`(추론 과정) + `message.content`(최종 답변) 분리 |
+
+```mermaid
+flowchart LR
+    M[모델 선택] --> C{thinking capability?}
+    C -->|No| G[think 필드 없음 · pills 없음]
+    C -->|Yes| P[즉시 / 추론 pills]
+    P -->|즉시| I["think: false"]
+    P -->|추론| T["think: true"]
+    I --> O[Ollama /api/chat]
+    T --> O
+    O --> R[답변 표시]
+    T --> E[추론 과정 expander]
+```
+
+- capability 없는 모델: pills 미표시, `think` 파라미터를 보내지 않음 (일반 채팅).
+- UI·완료 caption: [Streamlit](#streamlit) 참고.
 
 **실행 상태 (`execution_status`):**
 
-- `pending` — 승인 대기
-- `completed` — 실행 완료 (결과·다운로드 표시)
-- `cancelled` — 사용자 취소
+- `pending` 승인 대기
+- `completed` 실행 완료 (결과·다운로드 표시)
+- `cancelled` 사용자 취소
 
 ---
 
@@ -121,7 +147,7 @@ basic-sw-tech-sm/
 │   ├── session.py                  # st.session_state · 대화 CRUD · workspace · 업로드
 │   ├── bootstrap.py                # page_chat / page_ollama → UI 모듈 연결
 │   ├── api/
-│   │   └── ollama.py               # tags · version · pull · delete (HTTP)
+│   │   └── ollama.py               # tags · version · pull · delete · show(capabilities)
 │   ├── services/
 │   │   ├── storage.py              # index.json · 프로필 · app_settings 영속화
 │   │   ├── chat_state.py           # 메시지 append / patch · 세션 초기화
@@ -134,6 +160,8 @@ basic-sw-tech-sm/
 │       ├── chat/
 │       │   ├── page.py             # 채팅 본문 · chat_input · Ollama 호출 루프
 │       │   ├── sidebar.py          # Ollama URL · Persona · 프로필 · 히스토리
+│       │   ├── response_mode.py    # 즉시/추론 pills · capability 판별 · st.bottom
+│       │   ├── thinking_status.py  # 대기 스피너 · 완료 caption(즉시·/추론·N초)
 │       │   └── messages.py         # 메시지 렌더 · 코드 승인 UI
 │       ├── ollama/
 │       │   └── page.py             # 모델 목록 · pull · 삭제
@@ -156,8 +184,10 @@ basic-sw-tech-sm/
 | `main.py` | `st.navigation`으로 **AI 채팅** · **Ollama 관리** 페이지 등록 후 실행 |
 | `app/bootstrap.py` | `page_chat` → `ui/chat/sidebar` + `ui/chat/page`, `page_ollama` → `ui/ollama/page` |
 | `app/session.py` | `init_session_state`, `get_chat_workspace`, `append_message` 등 채팅 세션 API |
-| `app/services/chat_llm.py` | `build_api_messages`, `call_ollama` — LLM 요청 본문 |
-| `app/api/ollama.py` | 모델 목록·버전·pull·delete (관리 페이지·사이드바 공용) |
+| `app/services/chat_llm.py` | `build_api_messages`, `call_ollama`, LLM 요청 본문 |
+| `app/api/ollama.py` | 모델 목록·버전·pull·delete · `show`(capabilities) |
+| `app/ui/chat/response_mode.py` | thinking 지원 시 pills · `render_chat_bottom_bar` |
+| `app/ui/chat/thinking_status.py` | `run_with_thinking_status` · `format_thinking_label` |
 | `.streamlit/config.toml` | 기본 포트 `8507`, headless 모드 |
 | `chat_history/index.json` | 대화 목록·메시지 영속 저장 |
 | `chat_history/user_profile.json` | 이름·언어·시간대 등 (선택 입력) |
@@ -202,6 +232,13 @@ flowchart LR
 |--------|---------|------|
 | **AI 채팅** | `app/ui/chat/page.py` + `sidebar.py` | 대화 · 파일 첨부 · 코드 승인 실행 |
 | **Ollama 관리** | `app/ui/ollama/page.py` | 모델 목록 · `pull` 진행 · 삭제 |
+
+**AI 채팅, 즉시 / 추론 모드 선택** (thinking capability 모델만):
+
+- `st.bottom` 안에 **chat_input**(전체 너비) + 그 위 오른쪽 (`즉시` / `추론`).
+- 모델 목록 **새로고침** 시 capability 캐시 초기화 (`clear_model_capabilities_cache`).
+- 대기: `st.spinner` (`응답 중…` / `추론 중…` / 그 외 `생각 중…`).
+- 완료: assistant 메시지 caption (`즉시 · N.N초` / `추론 · N.N초`). 추론 모드이고 trace가 있으면 **추론 과정 (Thinking)** expander.
 
 Ollama URL은 두 페이지가 `st.session_state.ollama_base_url`을 공유합니다 (채팅 사이드바에서 설정).
 
@@ -248,3 +285,13 @@ streamlit run main.py         # .streamlit/config.toml → 포트 8507 (수정 �
 SSH 터널로 원격 Ollama에 연결한 뒤, 모델 목록 확인·`pull` 다운로드·삭제를 할 수 있습니다.
 
 <img width="1997" height="1891" alt="오라마 관리" src="https://github.com/user-attachments/assets/ff921a78-2f98-46d2-994b-244ac426d21e" />
+
+### 즉시 응답 / 추론 응답
+
+thinking capability가 있는 모델을 고른 뒤, 채팅 입력창 위 **즉시** / **추론** pills로 Ollama `think` 옵션을 바꿉니다.
+
+- **즉시**: 바로 답변 위주 (`think: false`). 완료 후 caption 예: `즉시 · 3.2초`.
+- **추론**: 모델 추론 trace를 **추론 과정 (Thinking)** expander에 표시한 뒤, 최종 답변을 본문에 표시 (`think: true`). 완료 후 caption 예: `추론 · 12.1초`.
+- capability 없는 모델: pills가 보이지 않으며, 일반 채팅과 동일하게 동작합니다.
+
+<img width="820" height="145" alt="즉시 또는 추론 모드" src="https://github.com/user-attachments/assets/2d97ac92-8011-4629-ab73-7ca6322b382e" />

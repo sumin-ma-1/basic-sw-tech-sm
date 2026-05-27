@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import json
 import urllib.request
+from dataclasses import dataclass
 from typing import Any
 
 import pandas as pd
 
 from app.session import build_data_summary, get_messages
 from app.ui.shared.profile import build_user_profile_context
+
+@dataclass(frozen=True)
+class OllamaChatResult:
+    content: str
+    thinking: str | None = None
+
 
 CODE_AGENT_INSTRUCTION = (
     "첨부 파일이 있습니다. 파일 내용을 분석한 뒤 요청에 맞게 응답하세요. "
@@ -73,7 +80,7 @@ def build_api_messages(
 def build_active_context(df: pd.DataFrame | None) -> str:
     if df is not None:
         return build_data_summary(df)
-    return "(활성 데이터셋 없음 — 채팅에서 CSV/Excel을 첨부하세요)"
+    return "(활성 데이터셋 없음, 채팅에서 CSV/Excel을 첨부하세요)"
 
 
 def call_ollama(
@@ -85,9 +92,11 @@ def call_ollama(
     temperature: float,
     max_tokens: int,
     attached_files: list[dict[str, Any]] | None = None,
-) -> str:
+    think: bool = False,
+    send_think: bool = False,
+) -> OllamaChatResult:
     url = f"{base_url.rstrip('/')}/api/chat"
-    payload = {
+    payload: dict[str, Any] = {
         "model": model,
         "messages": build_api_messages(
             system_prompt,
@@ -97,6 +106,8 @@ def call_ollama(
         "stream": False,
         "options": {"temperature": temperature, "num_predict": max_tokens},
     }
+    if send_think:
+        payload["think"] = think
     req = urllib.request.Request(
         url,
         data=json.dumps(payload).encode(),
@@ -105,4 +116,9 @@ def call_ollama(
     )
     with urllib.request.urlopen(req, timeout=300) as resp:
         data = json.loads(resp.read())
-    return data.get("message", {}).get("content", "")
+    message = data.get("message", {})
+    thinking = message.get("thinking")
+    return OllamaChatResult(
+        content=message.get("content", ""),
+        thinking=thinking if thinking and str(thinking).strip() else None,
+    )
