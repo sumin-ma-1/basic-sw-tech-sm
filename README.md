@@ -193,15 +193,6 @@ streamlit run app.py          # .streamlit/config.toml → 포트 8507 (수정 �
 
 ## 사용 화면 캡쳐
 
-스크린샷은 [`docs/screenshots/`](docs/screenshots/) 폴더에 PNG로 넣습니다. 파일명은 아래와 맞추면 README에 바로 연결됩니다.
-
-| 파일 | 설명 |
-|------|------|
-| `ollama-management.png` | **Ollama 관리** 페이지 |
-| `ai-chat.png` | **AI 채팅** 메인 (선택) |
-| `persona.png` | Persona 생성·관리 (선택) |
-| `code-execution.png` | 코드 승인·실행 결과 (선택) |
-
 ### 요청 의도별 코드 생성
 
 사용자의 승인을 받아 실행 후에 생성된 파일을 받을 수 있습니다.
