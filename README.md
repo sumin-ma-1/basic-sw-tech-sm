@@ -300,4 +300,4 @@ SSH 터널로 원격 Ollama에 연결한 뒤, 모델 목록 확인, `pull` 다�
 - **추론**: 모델의 thinking 출력을 **추론 과정 (Thinking)** expander에 표시한 뒤, 최종 답변을 본문에 표시합니다 (`think: true`). 완료 후 caption 예: `추론 · 12.1초`.
 - 추론 기능이 없는 모델: 클릭 요소가 표시되지 않으며, 일반 채팅과 동일하게 동작합니다.
 
-<img width="500" alt="즉시 또는 추론 모드" src="https://github.com/user-attachments/assets/2d97ac92-8011-4629-ab73-7ca6322b382e" />
+<img width="800" alt="즉시 또는 추론 모드" src="https://github.com/user-attachments/assets/2d97ac92-8011-4629-ab73-7ca6322b382e" />
