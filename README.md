@@ -272,7 +272,7 @@ streamlit run main.py         # .streamlit/config.toml → 포트 8507 (수정 �
 
 사용자의 승인을 받아 코드를 실행한 뒤, 생성된 결과 파일을 다운로드할 수 있습니다.
 
-<img width="800" alt="코드 실행 승인 및 결과 파일 다운로드" src="https://github.com/user-attachments/assets/9cf8313c-3b0f-4050-b84f-be0ed319ce8d" />
+<img width="800" alt="코드 실행 승인 및 결과 파일 다운로드" src="https://github.com/user-attachments/assets/ff605ac5-9114-46db-8093-bc5b9aa8a09c" />
 
 ### 시스템 프롬프팅 페르소나화
 
