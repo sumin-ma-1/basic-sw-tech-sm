@@ -16,7 +16,7 @@
 3. [Streamlit](#streamlit)
 4. [랜딩페이지](#landing-page)
 5. [실행 스크립트](#run-script)
-6. [사용 화면 캡쳐](#usage-screenshots)
+6. [사용 화면 캡처](#usage-screenshots)
 
 ---
 
@@ -278,32 +278,38 @@ streamlit run main.py         # .streamlit/config.toml → 포트 8507 (수정 �
 
 <a id="usage-screenshots"></a>
 
-## 사용 화면 캡쳐
+## 사용 화면 캡처
 
 ### 요청 의도별 코드 생성
 
-사용자의 승인을 받아 실행 후에 생성된 파일을 받을 수 있습니다.
+사용자의 승인을 받아 코드를 실행한 뒤, 생성된 결과 파일을 다운로드할 수 있습니다.
 
-<img width="1997" height="1891" alt="코드 실행 승인 및 결과 파일 다운로드" src="https://github.com/user-attachments/assets/9cf8313c-3b0f-4050-b84f-be0ed319ce8d" />
+<img width="800" alt="코드 실행 승인 및 결과 파일 다운로드" src="https://github.com/user-attachments/assets/86464fe5-36e3-499c-9b3f-c7d08694d4fb" />
 
 ### 시스템 프롬프팅 페르소나화
 
-프리셋 페르소나 외 사용자가 생성 및 관리할 수 있습니다.
+프리셋 페르소나 외에도 사용자가 원하는 페르소나를 제한 없이 생성하고 관리할 수 있습니다.
 
-<img width="1997" height="1687" alt="Persona 프리셋 및 커스텀 관리" src="https://github.com/user-attachments/assets/9e38cd40-d05f-4950-8cc1-3082da872343" />
+<img width="800" alt="시스템 프롬프팅 페르소나화" src="https://github.com/user-attachments/assets/ef91b7e8-9b4d-417d-a083-b554e022746f" />
+
+### 사용자 프로필
+
+채팅 사이드바에서 `이름`, `호칭`, `언어`, `시간대`, `자기소개`를 선택 입력하면, 이후 대화의 시스템 메시지에 전역 변수로 반영되어 맞춤 응답에 활용됩니다.
+
+<img width="800" alt="사용자 프로필 설정" src="https://github.com/user-attachments/assets/300db74a-c89b-473f-9dc4-ddd689824a4f" />
 
 ### Ollama 관리
 
-SSH 터널로 원격 Ollama에 연결한 뒤, 모델 목록 확인·`pull` 다운로드·삭제를 할 수 있습니다.
+SSH 터널로 원격 Ollama에 연결한 뒤, 모델 목록 확인, `pull` 다운로드, 삭제를 할 수 있습니다.
 
-<img width="1997" height="1891" alt="오라마 관리" src="https://github.com/user-attachments/assets/ff921a78-2f98-46d2-994b-244ac426d21e" />
+<img width="800" alt="Ollama 관리" src="https://github.com/user-attachments/assets/e2bb3800-b0b2-4c53-9a02-9f020ffb6cce" />
 
 ### 즉시 응답 / 추론 응답
 
-thinking capability가 있는 모델을 고른 뒤, 채팅 입력창 위 **즉시** / **추론** pills로 Ollama `think` 옵션을 바꿉니다.
+추론 기능이 있는 모델을 선택하면, 채팅 입력창 위에 **즉시** / **추론** 이 표시되며 Ollama의 `think` 옵션을 전환할 수 있습니다.
 
-- **즉시**: 바로 답변 위주 (`think: false`). 완료 후 caption 예: `즉시 · 3.2초`.
-- **추론**: 모델 추론 trace를 **추론 과정 (Thinking)** expander에 표시한 뒤, 최종 답변을 본문에 표시 (`think: true`). 완료 후 caption 예: `추론 · 12.1초`.
-- capability 없는 모델: pills가 보이지 않으며, 일반 채팅과 동일하게 동작합니다.
+- **즉시**: 바로 답변 위주로 응답합니다 (`think: false`). 완료 후 caption 예: `즉시 · 3.2초`.
+- **추론**: 모델의 thinking 출력을 **추론 과정 (Thinking)** expander에 표시한 뒤, 최종 답변을 본문에 표시합니다 (`think: true`). 완료 후 caption 예: `추론 · 12.1초`.
+- 추론 기능이 없는 모델: 클릭 요소가 표시되지 않으며, 일반 채팅과 동일하게 동작합니다.
 
-<img width="820" height="145" alt="즉시 또는 추론 모드" src="https://github.com/user-attachments/assets/2d97ac92-8011-4629-ab73-7ca6322b382e" />
+<img width="800" alt="즉시 또는 추론 모드" src="https://github.com/user-attachments/assets/05293d6f-dea0-484b-9afc-b43c6f053a5e" />
