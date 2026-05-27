@@ -11,14 +11,16 @@
 
 ## Table of contents
 
-1. [LLM 실행 구조](#llm-실행-구조)
-2. [시스템의 구성요소](#시스템의-구성요소)
+1. [LLM 실행 구조](#llm-architecture)
+2. [시스템의 구성요소](#system-components)
 3. [Streamlit](#streamlit)
-4. [랜딩페이지](#랜딩페이지)
-5. [실행 스크립트](#실행-스크립트)
-6. [사용 화면 캡쳐](#사용-화면-캡쳐)
+4. [랜딩페이지](#landing-page)
+5. [실행 스크립트](#run-script)
+6. [사용 화면 캡쳐](#usage-screenshots)
 
 ---
+
+<a id="llm-architecture"></a>
 
 ## LLM 실행 구조
 
@@ -131,6 +133,8 @@ flowchart LR
 
 ---
 
+<a id="system-components"></a>
+
 ## 시스템의 구성요소
 
 이 저장소는 Streamlit 기반 **`main.py` + `app/` 패키지** 구조입니다. (React·별도 프론트·랜딩 HTML은 없습니다.)
@@ -219,6 +223,8 @@ flowchart LR
 
 ---
 
+<a id="streamlit"></a>
+
 ## Streamlit
 
 이 프로젝트에서 Streamlit은 **UI 프레임워크**입니다.
@@ -244,6 +250,8 @@ Ollama URL은 두 페이지가 `st.session_state.ollama_base_url`을 공유합�
 
 ---
 
+<a id="landing-page"></a>
+
 ## 랜딩페이지
 
 이 저장소에는 **별도의 랜딩페이지가 없습니다.**
@@ -252,6 +260,8 @@ Ollama URL은 두 페이지가 `st.session_state.ollama_base_url`을 공유합�
 - 브라우저에서 보이는 화면은 Streamlit이 만든 UI이고, 실행 즉시 앱 화면(네비/채팅/관리)로 진입합니다.
 
 ---
+
+<a id="run-script"></a>
 
 ## 실행 스크립트
 
@@ -265,6 +275,8 @@ streamlit run main.py         # .streamlit/config.toml → 포트 8507 (수정 �
 > LLM이 생성한 코드는 승인 후 `workspaces/{대화ID}/_run_script.py`로 **임시 실행**됩니다. 이 파일은 앱을 띄우는 실행 스크립트와 무관합니다.
 
 ---
+
+<a id="usage-screenshots"></a>
 
 ## 사용 화면 캡쳐
 
