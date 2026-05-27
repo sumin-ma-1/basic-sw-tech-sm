@@ -9,73 +9,14 @@
 | 진입점 | `app.py` |
 | 기본 URL | `http://localhost:8507` |
 
-- [시스템의 구성요소](#시스템의-구성요소)
-- [LLM 실행 구조](#llm-실행-구조)
-- [사용 화면 캡쳐](#사용-화면-캡쳐)
+## Table of contents
 
----
-
-## 시스템의 구성요소
-
-이 저장소는 Streamlit 기반 **단일 앱 파일(`app.py`)** 중심입니다. React·별도 프론트·랜딩 HTML은 없습니다.
-
-### 저장소 구조
-
-```
-basic-sw-tech-sm/
-├── app.py                    # UI · Ollama · 파일 · 코드 실행 (전부 여기)
-├── requirements.txt          # Python 패키지
-├── .streamlit/config.toml    # Streamlit 서버 설정 (포트 8507)
-├── chat_history/             # 실행 중 생성 (대화·프로필·workspace)
-└── README.md
-```
-
-| 파일 / 폴더 | 역할 |
-|-------------|------|
-| `app.py` | `main()` → 사이드바 설정 + 메인 채팅 루프 |
-| `.streamlit/config.toml` | 포트 `8507`, headless 모드 |
-| `chat_history/index.json` | 대화 목록·메시지 영속 저장 |
-| `chat_history/user_profile.json` | 이름·언어·시간대 등 (선택 입력) |
-| `chat_history/app_settings.json` | Persona 선택·커스텀 Persona |
-| `chat_history/workspaces/{id}/` | 첨부 파일·코드 실행 결과 파일 |
-
-### 앱 화면 구조 (Streamlit)
-
-```mermaid
-flowchart LR
-    subgraph Browser["브라우저"]
-        Page["단일 페이지<br/>채팅 + 사이드바"]
-    end
-
-    subgraph App["app.py"]
-        direction TB
-
-        Nav["사이드바 네비<br/>AI 채팅 · Ollama 관리"]
-        Side["채팅 사이드바<br/>Ollama · Persona<br/>프로필 · 히스토리"]
-        Main["메인<br/>대화 목록 + chat_input"]
-
-        Nav --- Side
-        Side --- Main
-    end
-
-    Page --> App
-```
-
-| 영역 | 담당 기능 |
-|------|-----------|
-| **메인** | 메시지 표시, 파일 첨부 입력, 코드 승인·실행 결과 |
-| **사이드바** | Ollama URL·모델, 시스템 프롬프트(Persona), 유저 프로필, 대화 관리·보내기 |
-
-### 실행 방법
-
-매우 간단합니다.
-
-```powershell
-pip install -r requirements.txt
-streamlit run app.py          # .streamlit/config.toml → 포트 8507 (수정 가능)
-```
-
-> LLM이 생성한 코드는 승인 후 `workspaces/{대화ID}/_run_script.py`로 **임시 실행**됩니다. 이 파일은 앱을 띄우는 스크립트와 무관합니다.
+1. [LLM 실행 구조](#llm-실행-구조)
+2. [시스템의 구성요소](#시스템의-구성요소)
+3. [Streamlit](#streamlit)
+4. [랜딩페이지](#랜딩페이지)
+5. [실행 스크립트](#실행-스크립트)
+6. [사용 화면 캡쳐](#사용-화면-캡쳐)
 
 ---
 
@@ -163,7 +104,103 @@ sequenceDiagram
 
 ---
 
+## 시스템의 구성요소
+
+이 저장소는 Streamlit 기반 **단일 앱 파일(`app.py`)** 중심입니다. (React·별도 프론트·랜딩 HTML은 없습니다.)
+
+### 저장소 구조
+
+```
+basic-sw-tech-sm/
+├── app.py                    # UI · Ollama · 파일 · 코드 실행 (전부 여기)
+├── requirements.txt          # Python 패키지
+├── sm_final.png              # 브라우저 탭 파비콘
+├── docs/screenshots/         # README용 사용 화면 캡처 (PNG)
+├── .streamlit/config.toml    # Streamlit 서버 설정 (포트 8507)
+├── chat_history/             # 실행 중 생성 (대화·프로필·workspace)
+└── README.md
+```
+
+| 파일 / 폴더 | 역할 |
+|-------------|------|
+| `app.py` | `st.navigation`으로 페이지 구성 + 채팅/관리 UI + Ollama 호출 |
+| `.streamlit/config.toml` | 포트 `8507`, headless 모드 |
+| `chat_history/index.json` | 대화 목록·메시지 영속 저장 |
+| `chat_history/user_profile.json` | 이름·언어·시간대 등 (선택 입력) |
+| `chat_history/app_settings.json` | Persona 선택·커스텀 Persona |
+| `chat_history/workspaces/{id}/` | 첨부 파일·코드 실행 결과 파일 |
+| `docs/screenshots/` | README에 넣을 스크린샷(PNG) 보관 |
+
+### 앱 화면 구조 (Streamlit)
+
+```mermaid
+flowchart LR
+    subgraph Browser["브라우저"]
+        Page["단일 페이지 앱<br/>사이드바 네비 + 본문"]
+    end
+
+    subgraph App["app.py"]
+        Nav["사이드바 네비<br/>AI 채팅 · Ollama 관리"]
+        Side["채팅 사이드바<br/>Ollama · Persona · 프로필 · 히스토리"]
+        Main["메인(채팅)<br/>대화 목록 + chat_input"]
+        Admin["본문(관리)<br/>모델 목록 + pull + 삭제"]
+
+        Nav --- Side
+        Nav --- Admin
+        Side --- Main
+    end
+
+    Page --> App
+```
+
+---
+
+## Streamlit
+
+이 프로젝트에서 Streamlit은 **UI 프레임워크**입니다.
+
+- **역할**: 채팅 UI, 사이드바, 파일 업로드, 세션 상태 관리, 코드 승인 UI, 코드 실행 결과 표시
+- **하지 않는 일**: LLM 추론(그건 Ollama가 담당), 별도 프론트엔드/SPA 빌드
+
+또한 `st.navigation`을 사용해서 **페이지 2개**로 나뉩니다.
+
+- **AI 채팅**: 대화 + (채팅용) 사이드바 설정
+- **Ollama 관리**: 모델 목록 확인, 모델 다운로드(`pull`) 진행 표시, 모델 삭제
+
+---
+
+## 랜딩페이지
+
+이 저장소에는 **별도의 랜딩페이지가 없습니다.**
+
+- React/Next.js 같은 별도 프론트나 `index.html`을 두지 않습니다.
+- 브라우저에서 보이는 화면은 Streamlit이 만든 UI이고, 실행 즉시 앱 화면(네비/채팅/관리)로 진입합니다.
+
+---
+
+## 실행 스크립트
+
+별도 `run.sh` / `run.bat` / `docker-compose.yml` 없이, 아래 명령으로 실행합니다.
+
+```powershell
+pip install -r requirements.txt
+streamlit run app.py          # .streamlit/config.toml → 포트 8507 (수정 가능)
+```
+
+> LLM이 생성한 코드는 승인 후 `workspaces/{대화ID}/_run_script.py`로 **임시 실행**됩니다. 이 파일은 앱을 띄우는 실행 스크립트와 무관합니다.
+
+---
+
 ## 사용 화면 캡쳐
+
+스크린샷은 [`docs/screenshots/`](docs/screenshots/) 폴더에 PNG로 넣습니다. 파일명은 아래와 맞추면 README에 바로 연결됩니다.
+
+| 파일 | 설명 |
+|------|------|
+| `ollama-management.png` | **Ollama 관리** 페이지 |
+| `ai-chat.png` | **AI 채팅** 메인 (선택) |
+| `persona.png` | Persona 생성·관리 (선택) |
+| `code-execution.png` | 코드 승인·실행 결과 (선택) |
 
 ### 요청 의도별 코드 생성
 
