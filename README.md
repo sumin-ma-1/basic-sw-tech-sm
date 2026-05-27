@@ -6,7 +6,7 @@
 |------|------|
 | UI 프레임워크 | Streamlit (**AI 채팅** · **Ollama 관리** 가능) |
 | LLM | Ollama 로 실행하는 로컬 LLM 모델 `POST /api/chat` |
-| 진입점 | `app.py` |
+| 진입점 | `main.py` |
 | 기본 URL | `http://localhost:8507` |
 
 ## Table of contents
@@ -54,12 +54,12 @@ flowchart TB
     MSG --> API[Ollama /api/chat]
 ```
 
-| system 블록 | 설정 위치 |
-|-------------|-----------|
-| Persona | 사이드바 · Preset 3종 + Custom (`app_settings.json`) |
-| 프로필 | 모달 · `user_profile.json` |
-| 데이터셋 | `st.session_state.df` 요약 |
-| 첨부 지시 | 파일 있을 때만 · workspace 경로 포함 |
+| system 블록 | 코드 위치 · 저장 |
+|-------------|------------------|
+| Persona | `app/ui/shared/persona.py` · 사이드바 · `chat_history/app_settings.json` |
+| 프로필 | `app/ui/shared/profile.py` · 모달 · `chat_history/user_profile.json` |
+| 데이터셋 | `app/services/uploads.py` 요약 · `st.session_state.df` |
+| 첨부 지시 | `app/services/chat_llm.py` · `CODE_AGENT_INSTRUCTION` · workspace 경로 |
 
 
 ### 파일 첨부 · 코드 실행 구조
@@ -89,12 +89,13 @@ sequenceDiagram
     end
 ```
 
-| 단계 | 함수 | 설명 |
-|------|------|------|
-| 작업 폴더 | `get_chat_workspace()` | `chat_history/workspaces/{active_chat_id}/` |
-| 실행 | `execute_python_code()` | `sys.executable`로 스크립트 실행, cwd=workspace, 타임아웃 120초 |
-| 신규 파일 | `list_workspace_files()` diff | 실행 전후 파일 비교 → 다운로드 버튼 |
-| 상태 저장 | `patch_message()` | `execution_status`, `execution_result` 메시지에 기록 |
+| 단계 | 모듈 · 함수 | 설명 |
+|------|-------------|------|
+| 작업 폴더 | `app/session.py` · `get_chat_workspace()` | `chat_history/workspaces/{active_chat_id}/` |
+| 실행 | `app/services/code_exec.py` · `execute_python_code()` | `sys.executable`로 스크립트 실행, cwd=workspace, 타임아웃 120초 |
+| 신규 파일 | `app/services/workspace.py` · `list_workspace_files()` diff | 실행 전후 파일 비교 → 다운로드 버튼 |
+| 상태 저장 | `app/session.py` · `patch_message()` | `execution_status`, `execution_result` 메시지에 기록 |
+| LLM 호출 | `app/services/chat_llm.py` · `call_ollama()` | `POST /api/chat`, `stream: false` |
 
 **실행 상태 (`execution_status`):**
 
@@ -106,25 +107,58 @@ sequenceDiagram
 
 ## 시스템의 구성요소
 
-이 저장소는 Streamlit 기반 **단일 앱 파일(`app.py`)** 중심입니다. (React·별도 프론트·랜딩 HTML은 없습니다.)
+이 저장소는 Streamlit 기반 **`main.py` + `app/` 패키지** 구조입니다. (React·별도 프론트·랜딩 HTML은 없습니다.)
 
 ### 저장소 구조
 
 ```
 basic-sw-tech-sm/
-├── app.py                    # UI · Ollama · 파일 · 코드 실행 (전부 여기)
-├── requirements.txt          # Python 패키지
-├── sm_final.png              # 브라우저 탭 파비콘
-├── docs/screenshots/         # README용 사용 화면 캡처 (PNG)
-├── .streamlit/config.toml    # Streamlit 서버 설정 (포트 8507)
-├── chat_history/             # 실행 중 생성 (대화·프로필·workspace)
+├── main.py                         # Streamlit 진입 (set_page_config · navigation)
+├── app/                            # 애플리케이션 패키지
+│   ├── __init__.py
+│   ├── config.py                   # Ollama URL · Material 아이콘 · chat_history 경로
+│   ├── utils.py                    # new_chat · now_iso
+│   ├── session.py                  # st.session_state · 대화 CRUD · workspace · 업로드
+│   ├── bootstrap.py                # page_chat / page_ollama → UI 모듈 연결
+│   ├── api/
+│   │   └── ollama.py               # tags · version · pull · delete (HTTP)
+│   ├── services/
+│   │   ├── storage.py              # index.json · 프로필 · app_settings 영속화
+│   │   ├── chat_state.py           # 메시지 append / patch · 세션 초기화
+│   │   ├── chat_io.py              # 대화 import/export (JSON · MD)
+│   │   ├── chat_llm.py             # messages 조립 · Ollama POST /api/chat
+│   │   ├── workspace.py            # 대화별 작업 폴더 · 첨부 파일 복사
+│   │   ├── code_exec.py            # Python 블록 추출 · subprocess 실행
+│   │   └── uploads.py              # CSV/Excel/텍스트 파싱 · 데이터 요약
+│   └── ui/
+│       ├── chat/
+│       │   ├── page.py             # 채팅 본문 · chat_input · Ollama 호출 루프
+│       │   ├── sidebar.py          # Ollama URL · Persona · 프로필 · 히스토리
+│       │   └── messages.py         # 메시지 렌더 · 코드 승인 UI
+│       ├── ollama/
+│       │   └── page.py             # 모델 목록 · pull · 삭제
+│       ├── shared/
+│       │   ├── persona.py          # Persona 프리셋 · 커스텀 · system prompt
+│       │   └── profile.py          # 사용자 프로필 모달
+│       └── components/
+│           └── file_preview.py     # 첨부 파일 미리보기
+├── requirements.txt
+├── setup.txt                       # venv · CUDA 참고 (선택)
+├── sm_final.png                    # 브라우저 탭 파비콘
+├── docs/screenshots/               # README용 캡처 (PNG)
+├── .streamlit/config.toml          # 포트 8507 · headless
+├── chat_history/                   # 실행 중 생성 (git 제외)
 └── README.md
 ```
 
-| 파일 / 폴더 | 역할 |
-|-------------|------|
-| `app.py` | `st.navigation`으로 페이지 구성 + 채팅/관리 UI + Ollama 호출 |
-| `.streamlit/config.toml` | 포트 `8507`, headless 모드 |
+| 경로 | 역할 |
+|------|------|
+| `main.py` | `st.navigation`으로 **AI 채팅** · **Ollama 관리** 페이지 등록 후 실행 |
+| `app/bootstrap.py` | `page_chat` → `ui/chat/sidebar` + `ui/chat/page`, `page_ollama` → `ui/ollama/page` |
+| `app/session.py` | `init_session_state`, `get_chat_workspace`, `append_message` 등 채팅 세션 API |
+| `app/services/chat_llm.py` | `build_api_messages`, `call_ollama` — LLM 요청 본문 |
+| `app/api/ollama.py` | 모델 목록·버전·pull·delete (관리 페이지·사이드바 공용) |
+| `.streamlit/config.toml` | 기본 포트 `8507`, headless 모드 |
 | `chat_history/index.json` | 대화 목록·메시지 영속 저장 |
 | `chat_history/user_profile.json` | 이름·언어·시간대 등 (선택 입력) |
 | `chat_history/app_settings.json` | Persona 선택·커스텀 Persona |
@@ -139,7 +173,7 @@ flowchart LR
         Page["단일 페이지 앱<br/>사이드바 네비 + 본문"]
     end
 
-    subgraph App["app.py"]
+    subgraph App["main.py + app/"]
         Nav["사이드바 네비<br/>AI 채팅 · Ollama 관리"]
         Side["채팅 사이드바<br/>Ollama · Persona · 프로필 · 히스토리"]
         Main["메인(채팅)<br/>대화 목록 + chat_input"]
@@ -162,10 +196,14 @@ flowchart LR
 - **역할**: 채팅 UI, 사이드바, 파일 업로드, 세션 상태 관리, 코드 승인 UI, 코드 실행 결과 표시
 - **하지 않는 일**: LLM 추론(그건 Ollama가 담당), 별도 프론트엔드/SPA 빌드
 
-또한 `st.navigation`을 사용해서 **페이지 2개**로 나뉩니다.
+`main.py`에서 `st.navigation`으로 **페이지 2개**를 등록합니다.
 
-- **AI 채팅**: 대화 + (채팅용) 사이드바 설정
-- **Ollama 관리**: 모델 목록 확인, 모델 다운로드(`pull`) 진행 표시, 모델 삭제
+| 페이지 | UI 모듈 | 내용 |
+|--------|---------|------|
+| **AI 채팅** | `app/ui/chat/page.py` + `sidebar.py` | 대화 · 파일 첨부 · 코드 승인 실행 |
+| **Ollama 관리** | `app/ui/ollama/page.py` | 모델 목록 · `pull` 진행 · 삭제 |
+
+Ollama URL은 두 페이지가 `st.session_state.ollama_base_url`을 공유합니다 (채팅 사이드바에서 설정).
 
 ---
 
@@ -184,7 +222,7 @@ flowchart LR
 
 ```powershell
 pip install -r requirements.txt
-streamlit run app.py          # .streamlit/config.toml → 포트 8507 (수정 가능)
+streamlit run main.py         # .streamlit/config.toml → 포트 8507 (수정 가능)
 ```
 
 > LLM이 생성한 코드는 승인 후 `workspaces/{대화ID}/_run_script.py`로 **임시 실행**됩니다. 이 파일은 앱을 띄우는 실행 스크립트와 무관합니다.

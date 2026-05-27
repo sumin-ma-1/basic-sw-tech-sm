@@ -1,2 +1,6 @@
 chat_history/
 venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
