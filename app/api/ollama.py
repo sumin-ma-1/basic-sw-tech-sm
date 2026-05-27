@@ -6,6 +6,28 @@ import urllib.request
 from typing import Any, Callable
 
 
+def format_bytes(num: int | float | None) -> str:
+    if num is None:
+        return "—"
+    n = float(num)
+    if n < 0:
+        return "—"
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
+        if n < 1024 or unit == "TiB":
+            if unit == "B":
+                return f"{int(n)} {unit}"
+            return f"{n:.1f} {unit}"
+        n /= 1024
+    return f"{n:.1f} TiB"
+
+
+def processor_split(size: int, size_vram: int) -> str:
+    if size <= 0:
+        return "—"
+    gpu = int(min(max((size_vram / size) * 100, 0), 100))
+    return f"{100 - gpu}% CPU / {gpu}% GPU"
+
+
 def ollama_request(
     base_url: str,
     path: str,
@@ -25,12 +47,88 @@ def ollama_request(
     return json.loads(body)
 
 
-def fetch_ollama_models(base_url: str) -> list[str]:
+def fetch_ollama_tags(base_url: str) -> list[dict[str, Any]]:
     try:
         data = ollama_request(base_url, "/api/tags", timeout=5)
-        return sorted(m["name"] for m in data.get("models", []))
+        models = data.get("models", [])
+        if isinstance(models, list):
+            return [m for m in models if isinstance(m, dict)]
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError):
-        return []
+        pass
+    return []
+
+
+def fetch_ollama_models(base_url: str) -> list[str]:
+    return sorted(m.get("name", "") for m in fetch_ollama_tags(base_url) if m.get("name"))
+
+
+def fetch_ollama_ps(base_url: str) -> list[dict[str, Any]]:
+    try:
+        data = ollama_request(base_url, "/api/ps", timeout=5)
+        models = data.get("models", [])
+        if isinstance(models, list):
+            return [m for m in models if isinstance(m, dict)]
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError):
+        pass
+    return []
+
+
+def fetch_ollama_info(base_url: str) -> dict[str, Any] | None:
+    try:
+        return ollama_request(base_url, "/api/info", timeout=5)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return None
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+        pass
+    return None
+
+
+def fetch_ollama_server_resources(base_url: str) -> dict[str, Any]:
+    installed = fetch_ollama_tags(base_url)
+    running = fetch_ollama_ps(base_url)
+    info = fetch_ollama_info(base_url)
+
+    total_memory: int | None = None
+    free_memory: int | None = None
+    filesystem_used: int | None = None
+    gpus: list[dict[str, Any]] = []
+
+    if info:
+        models_block = info.get("models") if isinstance(info.get("models"), dict) else {}
+        if isinstance(models_block.get("filesystem_used"), int):
+            filesystem_used = models_block["filesystem_used"]
+
+        compute = info.get("compute") if isinstance(info.get("compute"), dict) else {}
+        system = compute.get("system_compute") or compute.get("system")
+        if isinstance(system, dict):
+            if isinstance(system.get("total_memory"), int):
+                total_memory = system["total_memory"]
+            if isinstance(system.get("free_memory"), int):
+                free_memory = system["free_memory"]
+
+        raw_gpus = compute.get("supported_gpus")
+        if isinstance(raw_gpus, list):
+            gpus = [g for g in raw_gpus if isinstance(g, dict)]
+
+    installed_total = sum(int(m.get("size") or 0) for m in installed)
+    if filesystem_used is None:
+        filesystem_used = installed_total
+
+    return {
+        "info": info,
+        "installed": installed,
+        "installed_count": len(installed),
+        "installed_total_bytes": installed_total,
+        "filesystem_used_bytes": filesystem_used,
+        "running": running,
+        "running_count": len(running),
+        "running_size_bytes": sum(int(m.get("size") or 0) for m in running),
+        "running_vram_bytes": sum(int(m.get("size_vram") or 0) for m in running),
+        "total_memory_bytes": total_memory,
+        "free_memory_bytes": free_memory,
+        "gpus": gpus,
+    }
 
 
 def fetch_model_capabilities(base_url: str, model: str) -> list[str]:

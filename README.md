@@ -17,6 +17,7 @@
 4. [랜딩페이지](#landing-page)
 5. [실행 스크립트](#run-script)
 6. [사용 화면 캡처](#usage-screenshots)
+7. [Claude Code/Codex skill과의 연관](#ai-codex-skills)
 
 ---
 
@@ -189,9 +190,10 @@ basic-sw-tech-sm/
 | `app/bootstrap.py` | `page_chat` → `ui/chat/sidebar` + `ui/chat/page`, `page_ollama` → `ui/ollama/page` |
 | `app/session.py` | `init_session_state`, `get_chat_workspace`, `append_message` 등 채팅 세션 API |
 | `app/services/chat_llm.py` | `build_api_messages`, `call_ollama`, LLM 요청 본문 |
-| `app/api/ollama.py` | 모델 목록·버전·pull·delete · `show`(capabilities) |
+| `app/api/ollama.py` | 모델 목록·버전·pull·delete · `show`(capabilities) · `ps`(로드 상태) |
 | `app/ui/chat/response_mode.py` | thinking 지원 시 pills · `render_chat_bottom_bar` |
 | `app/ui/chat/thinking_status.py` | `run_with_thinking_status` · `format_thinking_label` |
+| `app/ui/ollama/page.py` | **서버 리소스(디스크/로드/VRAM)** + 모델 pull/delete UI |
 | `.streamlit/config.toml` | 기본 포트 `8507`, headless 모드 |
 | `chat_history/index.json` | 대화 목록·메시지 영속 저장 |
 | `chat_history/user_profile.json` | 이름·언어·시간대 등 (선택 입력) |
@@ -227,24 +229,23 @@ flowchart LR
 
 ## Streamlit
 
-이 프로젝트에서 Streamlit은 **UI 프레임워크**입니다.
+Streamlit을 쓰는 이유는 **파이썬 코드만으로 빠르게 데이터/AI 앱 UI**을 만들 수 있기 입니다.
 
-- **역할**: 채팅 UI, 사이드바, 파일 업로드, 세션 상태 관리, 코드 승인 UI, 코드 실행 결과 표시
-- **하지 않는 일**: LLM 추론(그건 Ollama가 담당), 별도 프론트엔드/SPA 빌드
+Streamlit이 특히 잘 맞는 상황:
+- 프로토타입이 빠름: `st.button`, `st.file_uploader`, `st.dataframe`, `st.chat_input` 같은 컴포넌트로 바로 화면 구성
+- 데이터/ML/LLM 데모에 최적화: Pandas/Plotly/matplotlib/scikit-learn/LangChain/OpenAI API 같은 파이썬 생태계와 자연스럽게 연결
+- 비개발자에게 공유하기 쉬움: 노트북보다 “앱” 형태라 버튼/파일 업로드 → 결과 확인 흐름이 직관적
+- 프론트엔드 개발 부담이 작음: UI를 매우 세밀하게 커스터마이즈할 필요가 없으면 구현 속도가 빨라짐
+- 내부 도구에 적합: 대시보드, 리포트 자동화, 문서 요약기, RAG 검색기, CSV 분석기 같은 사내 도구
 
-`main.py`에서 `st.navigation`으로 **페이지 2개**를 등록합니다.
+다만 항상 좋은 선택은 아닙니다. 복잡한 사용자 권한, 대규모 트래픽, 정교한 UI/UX, 모바일 최적화, 실시간 협업이 중요하면 FastAPI + React/Next.js 같은 구조가 더 적합할 수 있습니다.
+
+본 프로젝트에서는 `main.py`에서 `st.navigation`으로 **페이지 2개**를 등록합니다.
 
 | 페이지 | UI 모듈 | 내용 |
 |--------|---------|------|
 | **AI 채팅** | `app/ui/chat/page.py` + `sidebar.py` | 대화 · 파일 첨부 · 코드 승인 실행 |
-| **Ollama 관리** | `app/ui/ollama/page.py` | 모델 목록 · `pull` 진행 · 삭제 |
-
-**AI 채팅, 즉시 / 추론 모드 선택** (thinking capability 모델만):
-
-- `st.bottom` 안에 **chat_input**(전체 너비) + 그 위 오른쪽 (`즉시` / `추론`).
-- 모델 목록 **새로고침** 시 capability 캐시 초기화 (`clear_model_capabilities_cache`).
-- 대기: `st.spinner` (`응답 중…` / `추론 중…` / 그 외 `생각 중…`).
-- 완료: assistant 메시지 caption (`즉시 · N.N초` / `추론 · N.N초`). 추론 모드이고 trace가 있으면 **추론 과정 (Thinking)** expander.
+| **Ollama 관리** | `app/ui/ollama/page.py` | 모델 목록 · `pull` 진행 · 삭제 · **서버 리소스(디스크/로드/VRAM)** |
 
 Ollama URL은 두 페이지가 `st.session_state.ollama_base_url`을 공유합니다 (채팅 사이드바에서 설정).
 
@@ -302,7 +303,17 @@ streamlit run main.py         # .streamlit/config.toml → 포트 8507 (수정 �
 
 SSH 터널로 원격 Ollama에 연결한 뒤, 모델 목록 확인, `pull` 다운로드, 삭제를 할 수 있습니다.
 
-<img width="800" alt="Ollama 관리" src="https://github.com/user-attachments/assets/e2bb3800-b0b2-4c53-9a02-9f020ffb6cce" />
+<img width="800" alt="Ollama 관리" src="https://github.com/user-attachments/assets/3a70917d-7591-4c49-a9c8-00ba2db50d2b" />
+
+### 서버 리소스
+
+Ollama 관리 페이지 상단에서 **서버 리소스**를 확인할 수 있습니다.
+
+- **모델 저장(디스크)**: 설치된 모델의 디스크 사용량 합계 (`/api/tags` 기반)
+- **메모리 로드 / VRAM 로드 합계**: 현재 메모리에 올라간 모델과 VRAM 사용량 (`/api/ps` 기반)
+- (지원 시) **시스템 RAM / GPU VRAM**도 함께 표시됩니다. (`/api/info`가 없는 버전에서는 일부 항목이 제한될 수 있습니다.)
+
+<img width="800" alt="서버 리소스" src=""https://github.com/user-attachments/assets/6dd2462d-c05a-4f97-ac0a-c74886ae543a" />
 
 ### 즉시 응답 / 추론 응답
 
@@ -313,3 +324,18 @@ SSH 터널로 원격 Ollama에 연결한 뒤, 모델 목록 확인, `pull` 다�
 - 추론 기능이 없는 모델: 클릭 요소가 표시되지 않으며, 일반 채팅과 동일하게 동작합니다.
 
 <img width="800" alt="즉시 또는 추론 모드" src="https://github.com/user-attachments/assets/05293d6f-dea0-484b-9afc-b43c6f053a5e" />
+
+---
+
+<a id="ai-codex-skills"></a>
+
+## Claude Code/Codex skill과의 연관
+
+Claude Code / Codex 계열의 **코드 에이전트 skill**을, 본 구현의 기능과 연결하면 다음처럼 정리할 수 있습니다.
+
+- 코드 작성/수정: 모델이 ` ```python ` 블록을 만들면 **자동 실행하지 않고** 코드 승인 UI로 전달한 뒤 실행합니다.
+- 파일/데이터 다루기: CSV/Excel 업로드 및 데이터 요약 후, workspace에 첨부 파일을 저장해 다음 단계에 활용합니다.
+- 툴 사용(실행): 승인된 뒤에 `subprocess`로 `_run_script.py`를 실행하고, 실행 로그와 결과 파일(다운로드)을 제공합니다.
+- 반복/검증 루프: 실행 결과로 생성된 파일은 다운로드 및 다음 턴 컨텍스트로 이어지며, 대화/워크스페이스 히스토리가 남습니다.
+- 안전장치: 실행 상태(`pending`/`completed`/`cancelled`)와 workspace 격리로 “무단 실행”을 방지합니다.
+- 인지 깊이 제어(추론 vs 즉시): thinking-capability 모델에서 `즉시`/`추론` 모드를 선택해 `think` 파라미터와 (선택) thinking trace expander를 운용합니다.
