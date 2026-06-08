@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import platform
+import subprocess
+from urllib.parse import urlparse
+
 import streamlit as st
 
 from app.api.ollama import (
@@ -11,11 +15,68 @@ from app.api.ollama import (
     processor_split,
     pull_ollama_model,
 )
+from app.remote_ssh import (
+    get_ssh_probe_hint,
+    get_ssh_target,
+    resolve_remote_gpu_names,
+    resolve_remote_host_hint,
+    save_remote_gpu_names,
+    save_remote_host_hint,
+)
 from app.ui.chat.response_mode import clear_model_capabilities_cache
 
 
 def _load_ollama_resources(base_url: str) -> dict:
     return fetch_ollama_server_resources(base_url)
+
+
+def _load_remote_host_hint() -> str:
+    key = "_ollama_remote_host_hint"
+    if key not in st.session_state:
+        st.session_state[key] = resolve_remote_host_hint()
+    return st.session_state[key]
+
+
+def _load_remote_gpu_names() -> list[str]:
+    key = "_ollama_remote_gpu_names"
+    if key not in st.session_state:
+        st.session_state[key] = resolve_remote_gpu_names()
+    return st.session_state[key]
+
+
+def _detect_local_linux_host_and_gpu() -> tuple[str, list[str]]:
+    """리눅스에서 앱을 직접 실행할 때 hostname/GPU 이름을 자동 수집."""
+    if platform.system().lower() != "linux":
+        return "", []
+
+    host = ""
+    gpu_names: list[str] = []
+    try:
+        host = (
+            subprocess.run(
+                ["hostname"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=2,
+            ).stdout.strip()
+        )
+    except (OSError, subprocess.SubprocessError):
+        host = ""
+
+    try:
+        out = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=3,
+        ).stdout
+        gpu_names = [line.strip() for line in out.splitlines() if line.strip()]
+    except (OSError, subprocess.SubprocessError):
+        gpu_names = []
+
+    return host, gpu_names
 
 
 @st.dialog("모델 삭제 확인", width="large")
@@ -50,8 +111,75 @@ def _confirm_delete_ollama_model_dialog(
             st.rerun()
 
 
-def render_server_resources(resources: dict) -> None:
+def _render_remote_server_manual_setup(
+    *,
+    remote_hint: str,
+    gpu_names: list[str],
+    is_tunnel: bool,
+) -> None:
+    if not is_tunnel:
+        return
+    need_manual = not remote_hint or not gpu_names
+    if not need_manual and not get_ssh_target():
+        return
+
+    with st.expander("원격 서버 정보 (수동 입력)", expanded=need_manual and not remote_hint):
+        st.caption(
+            "SSH 터널은 **비밀번호**로 연결해도 됩니다. "
+            "다만 hostname·GPU **자동 조회**는 SSH **키**가 등록되어 있어야 합니다."
+        )
+        probe_hint = get_ssh_probe_hint()
+        if probe_hint and need_manual:
+            st.warning(probe_hint)
+
+        host_value = remote_hint or ""
+        gpu_value = ", ".join(gpu_names)
+        manual_host = st.text_input(
+            "원격 hostname",
+            value=host_value,
+            placeholder="spark-005c",
+            key="manual_remote_host_input",
+        )
+        manual_gpu = st.text_input(
+            "GPU 이름",
+            value=gpu_value,
+            placeholder="NVIDIA GB10",
+            key="manual_remote_gpu_input",
+        )
+        st.caption("원격 SSH 세션에서 `hostname`, `nvidia-smi --query-gpu=name --format=csv,noheader` 결과를 입력하세요.")
+        if st.button("저장", key="save_manual_remote_server"):
+            save_remote_host_hint(manual_host)
+            save_remote_gpu_names([g.strip() for g in manual_gpu.split(",") if g.strip()])
+            st.session_state.pop("_ollama_remote_host_hint", None)
+            st.session_state.pop("_ollama_remote_gpu_names", None)
+            st.rerun()
+
+
+def render_server_resources(resources: dict, *, base_url: str) -> None:
     st.subheader("서버 리소스")
+    parsed = urlparse(base_url)
+    host = parsed.hostname or base_url
+    is_tunnel = host in {"localhost", "127.0.0.1"}
+    remote_hint = _load_remote_host_hint()
+    local_linux_host, local_linux_gpu_names = _detect_local_linux_host_and_gpu()
+    if is_tunnel:
+        if remote_hint:
+            st.caption(f"서버 식별: localhost (SSH 터널) → 원격 `{remote_hint}`")
+        elif local_linux_host:
+            st.caption(f"서버 식별: 로컬 리눅스 `{local_linux_host}`")
+        elif get_ssh_target():
+            probe_hint = get_ssh_probe_hint()
+            st.caption(
+                "서버 식별: localhost (SSH 터널) · 원격 hostname 자동 조회 실패"
+                + (f" — {probe_hint}" if probe_hint else "")
+            )
+        else:
+            st.caption(
+                "서버 식별: localhost (SSH 터널) · "
+                "`chat_history/ollama_ssh_target.txt` 또는 환경 변수 `OLLAMA_SSH`로 자동 조회 가능"
+            )
+    else:
+        st.caption(f"서버 식별: {host}")
 
     has_system_ram = resources.get("total_memory_bytes") is not None
     if not has_system_ram:
@@ -102,6 +230,35 @@ def render_server_resources(resources: dict) -> None:
         running_rows = running_rows[:api_running_count]
 
     running_count = len(running_rows)
+
+    # 연결된 GPU 이름(가능한 경우)
+    gpu_names = []
+    for g in gpus:
+        if not isinstance(g, dict):
+            continue
+        name = str(g.get("name") or "").strip()
+        if name:
+            gpu_names.append(name)
+    if not gpu_names and local_linux_gpu_names:
+        gpu_names = local_linux_gpu_names
+    if not gpu_names:
+        gpu_names = _load_remote_gpu_names()
+    if gpu_names:
+        st.info(f"연결된 GPU: **{', '.join(gpu_names)}**")
+    elif get_ssh_target():
+        st.caption(
+            "연결된 GPU: 확인 불가 (원격 `nvidia-smi` 조회 실패 또는 `/api/info` 미지원)"
+        )
+    else:
+        st.caption(
+            "연결된 GPU: 확인 불가 (`/api/info` 미지원 · SSH 대상 설정 시 `nvidia-smi` 자동 조회 가능)"
+        )
+
+    _render_remote_server_manual_setup(
+        remote_hint=remote_hint,
+        gpu_names=gpu_names,
+        is_tunnel=is_tunnel,
+    )
 
     col_disk, col_loaded, col_vram = st.columns(3)
     with col_disk:
@@ -244,6 +401,8 @@ def render_ollama_page(
         icon=icon_refresh,
         help="Ollama 연결 및 설치 모델 목록 갱신",
     ):
+        st.session_state.pop("_ollama_remote_host_hint", None)
+        st.session_state.pop("_ollama_remote_gpu_names", None)
         st.session_state.ollama_models = fetch_ollama_models(base_url)
         st.session_state.ollama_resources = _load_ollama_resources(base_url)
         st.session_state.ollama_resources_url = base_url
@@ -271,7 +430,7 @@ def render_ollama_page(
         ) != base_url:
             st.session_state.ollama_resources = _load_ollama_resources(base_url)
             st.session_state.ollama_resources_url = base_url
-        render_server_resources(st.session_state.ollama_resources)
+        render_server_resources(st.session_state.ollama_resources, base_url=base_url)
     else:
         st.warning("미연결, URL · SSH 터널 · `ollama serve` 확인")
         st.session_state.pop("ollama_resources", None)

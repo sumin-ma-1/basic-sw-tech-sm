@@ -28,6 +28,14 @@ def processor_split(size: int, size_vram: int) -> str:
     return f"{100 - gpu}% CPU / {gpu}% GPU"
 
 
+_OLLAMA_NETWORK_ERRORS = (
+    urllib.error.URLError,
+    TimeoutError,
+    ConnectionError,
+    OSError,
+)
+
+
 def ollama_request(
     base_url: str,
     path: str,
@@ -40,8 +48,11 @@ def ollama_request(
     data = json.dumps(payload).encode() if payload is not None else None
     headers = {"Content-Type": "application/json"} if data else {}
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        body = resp.read()
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read()
+    except _OLLAMA_NETWORK_ERRORS as exc:
+        raise urllib.error.URLError(str(exc)) from exc
     if not body:
         return {}
     return json.loads(body)
