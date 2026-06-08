@@ -15,3 +15,11 @@ rm -Recurse -Force venv
 
 ---- dependancy 다운로드 ----
 pip install -r requirements.txt
+
+---- SSH 터널 + 원격 서버/GPU 표시(선택) ----
+# 수동확인
+hostname
+nvidia-smi --query-gpu=name --format=csv,noheader
+
+# 서버 RAM 실제 여유 확인
+free -h 
