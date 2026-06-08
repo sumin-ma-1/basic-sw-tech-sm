@@ -6,7 +6,7 @@ from pathlib import Path
 # Defaults
 DEFAULT_OLLAMA_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_REMOTE_HOST = os.environ.get("OLLAMA_REMOTE_HOST", "").strip()
-# SSH 터널 대상 (예: sumin@bigsoft.iptime.org:7780) — hostname/GPU 자동 조회용
+# SSH 터널 대상, hostname/GPU 자동 조회용
 OLLAMA_SSH_TARGET = os.environ.get("OLLAMA_SSH", "").strip()
 
 # Material Symbols (rounded), https://fonts.google.com/icons

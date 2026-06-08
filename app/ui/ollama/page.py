@@ -182,11 +182,7 @@ def render_server_resources(resources: dict, *, base_url: str) -> None:
         st.caption(f"서버 식별: {host}")
 
     has_system_ram = resources.get("total_memory_bytes") is not None
-    if not has_system_ram:
-        st.caption(
-            "이 Ollama 버전은 서버 전체 RAM API(`/api/info`)를 제공하지 않을 수 있습니다. "
-            "아래 **로드된 모델·디스크 용량**을 참고하세요."
-        )
+    has_gpu_vram_api = bool(resources.get("gpus"))
 
     installed_count = int(resources.get("installed_count") or 0)
     running_count = int(resources.get("running_count") or 0)
@@ -245,14 +241,6 @@ def render_server_resources(resources: dict, *, base_url: str) -> None:
         gpu_names = _load_remote_gpu_names()
     if gpu_names:
         st.info(f"연결된 GPU: **{', '.join(gpu_names)}**")
-    elif get_ssh_target():
-        st.caption(
-            "연결된 GPU: 확인 불가 (원격 `nvidia-smi` 조회 실패 또는 `/api/info` 미지원)"
-        )
-    else:
-        st.caption(
-            "연결된 GPU: 확인 불가 (`/api/info` 미지원 · SSH 대상 설정 시 `nvidia-smi` 자동 조회 가능)"
-        )
 
     _render_remote_server_manual_setup(
         remote_hint=remote_hint,
@@ -260,25 +248,31 @@ def render_server_resources(resources: dict, *, base_url: str) -> None:
         is_tunnel=is_tunnel,
     )
 
+    st.markdown("**Ollama 모델 리소스**")
+    st.caption(
+        "아래 카드·표는 **설치·로드된 모델** 기준(`/api/tags`, `/api/ps`)입니다. "
+        "서버 RAM·GPU 전체 용량과는 다를 수 있습니다."
+    )
+
     col_disk, col_loaded, col_vram = st.columns(3)
     with col_disk:
         with st.container(border=True):
-            st.caption("모델 저장(디스크)")
+            st.caption("모델 저장 (디스크)")
             disk_value = format_bytes(resources.get("filesystem_used_bytes"))
             st.write(disk_value)
             st.badge(f"{installed_count}개 설치", color="gray")
     with col_loaded:
         with st.container(border=True):
-            st.caption("메모리 로드")
+            st.caption("로드 RAM 합계")
             mem_value = format_bytes(resources.get("running_size_bytes"))
             st.write(mem_value)
             st.badge(f"{running_count}개 실행 중", color="gray")
     with col_vram:
         with st.container(border=True):
-            st.caption("VRAM 로드 합계")
+            st.caption("로드 VRAM 합계")
             vram_value = format_bytes(resources.get("running_vram_bytes"))
             st.write(vram_value)
-            st.badge(f"{running_count}개 모델 로드", color="gray")
+            st.badge(f"{running_count}개 모델", color="gray")
 
     # GPU 메모리 임계치 배너(가능할 때만)
     vram_threshold = 0.90
@@ -294,8 +288,15 @@ def render_server_resources(resources: dict, *, base_url: str) -> None:
                     f"{format_bytes(total_vram_sum)} ({used_ratio*100:.0f}%)"
                 )
 
-    with st.expander("시스템 RAM", expanded=False):
-        if has_system_ram:
+    if not has_system_ram and not has_gpu_vram_api:
+        st.info(
+            "서버 **전체** RAM·GPU VRAM은 이 Ollama 버전에서 `/api/info`로 제공되지 않아 "
+            "별도 패널을 표시하지 않습니다. OS 수치는 서버에서 `free -h`, `nvidia-smi`로 확인하세요. "
+            "(Ollama 업그레이드 시 자동 표시 가능)"
+        )
+
+    if has_system_ram:
+        with st.expander("시스템 RAM (서버 전체)", expanded=False):
             total = int(resources["total_memory_bytes"])
             free = int(resources.get("free_memory_bytes") or 0)
             used = max(total - free, 0)
@@ -303,13 +304,9 @@ def render_server_resources(resources: dict, *, base_url: str) -> None:
                 f"**시스템 RAM** · 사용 {format_bytes(used)} / 전체 {format_bytes(total)}"
             )
             st.progress(min(used / total, 1.0) if total else 0.0)
-        else:
-            st.info("시스템 전체 RAM 수치는 제공되지 않습니다(`total_memory_bytes` 없음).")
 
-    with st.expander("GPU / VRAM", expanded=False):
-        if not gpus:
-            st.info("GPU/VRAM 세부 정보가 없습니다. (`supported_gpus` 미포함 또는 API 제한)")
-        else:
+    if has_gpu_vram_api:
+        with st.expander("GPU / VRAM (서버 전체)", expanded=False):
             st.markdown("**GPU별 VRAM 여유**")
             for gpu in gpus:
                 name = gpu.get("name") or gpu.get("gpu_id") or "GPU"
